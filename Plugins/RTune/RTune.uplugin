@@ -1,0 +1,42 @@
+{
+	"FileVersion": 3,
+	"Version": 1,
+	"VersionName": "2.0.0",
+	"FriendlyName": "RTune",
+	"Description": "Custom vehicle physics solution. Update Version: 01-06-2025",
+	"Category": "RTune Vehicle Physics",
+	"CreatedBy": "Kallisto",
+	"CreatedByURL": "",
+	"DocsURL": "https://docs.google.com/document/d/1_Ztzd65r45BxUe5F6jGQDaP1k_PoSq1Eo1mMaNqS8Ss/edit?usp=sharing",
+	"MarketplaceURL": "com.epicgames.launcher://ue/marketplace/product/08b9b8090d6f467198628124953b32be",
+	"SupportURL": "",
+	"EngineVersion": "5.7.0",
+	"CanContainContent": false,
+	"Installed": true,
+	"Modules": [
+		{
+			"Name": "RTune",
+			"Type": "Runtime",
+			"LoadingPhase": "Default",
+			"PlatformAllowList": [
+				"Win64",
+				"Mac",
+				"IOS",
+				"Android",
+				"Linux"
+			]
+		},
+		{
+			"Name": "AsyncTickPhysics",
+			"Type": "Runtime",
+			"LoadingPhase": "Default",
+			"PlatformAllowList": [
+				"Win64",
+				"Mac",
+				"IOS",
+				"Android",
+				"Linux"
+			]
+		}
+	]
+}
