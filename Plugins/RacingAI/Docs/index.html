@@ -1,0 +1,684 @@
+<title>AI 레이서 만들기</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=Gothic+A1:wght@300;400;500;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap">
+
+<style>
+:root {
+  --paper:      #EDF0F1;
+  --card:       #FFFFFF;
+  --card-2:     #E3E8EA;
+  --line:       #C9D2D5;
+  --line-soft:  #DCE3E5;
+  --ink:        #171B1E;
+  --ink-2:      #4A565B;
+  --ink-3:      #78868B;
+  --kerb:       #C4382E;
+  --kerb-soft:  #F7DEDB;
+  --pit:        #1B6B5A;
+  --pit-soft:   #D8ECE6;
+  --flag:       #9A6B0C;
+  --flag-soft:  #F7E9CB;
+  --road:       #B9C3C7;
+
+  --pad: clamp(18px, 4.5vw, 56px);
+  color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #121618; --card: #1A2023; --card-2: #242C30;
+    --line: #333E43; --line-soft: #262F33;
+    --ink: #E6EBEC; --ink-2: #A6B3B7; --ink-3: #77868B;
+    --kerb: #EC7A6E; --kerb-soft: #3A1F1C;
+    --pit: #63BFA6; --pit-soft: #16302A;
+    --flag: #DCA83F; --flag-soft: #322713;
+    --road: #39454A;
+  }
+}
+
+:root[data-theme="dark"] {
+  --paper: #121618; --card: #1A2023; --card-2: #242C30;
+  --line: #333E43; --line-soft: #262F33;
+  --ink: #E6EBEC; --ink-2: #A6B3B7; --ink-3: #77868B;
+  --kerb: #EC7A6E; --kerb-soft: #3A1F1C;
+  --pit: #63BFA6; --pit-soft: #16302A;
+  --flag: #DCA83F; --flag-soft: #322713;
+  --road: #39454A;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: "Gothic A1", "Malgun Gothic", sans-serif;
+  font-size: 17px;
+  line-height: 1.78;
+  -webkit-font-smoothing: antialiased;
+}
+
+.wrap { max-width: 880px; margin: 0 auto; padding: 0 var(--pad) 100px; }
+
+code, .mono { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: .86em; }
+code { background: var(--card-2); padding: .12em .42em; border-radius: 3px; white-space: nowrap; }
+
+header { padding: clamp(44px, 8vw, 84px) 0 34px; }
+.eyebrow {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 11px; letter-spacing: .2em; text-transform: uppercase;
+  color: var(--kerb); margin-bottom: 14px;
+}
+h1 {
+  font-family: "Black Han Sans", "Gothic A1", sans-serif;
+  font-weight: 400; font-size: clamp(40px, 10vw, 76px);
+  line-height: 1.06; letter-spacing: -.01em; margin: 0 0 18px; text-wrap: balance;
+}
+.lede { font-size: clamp(17px, 2.2vw, 20px); color: var(--ink-2); max-width: 34em; margin: 0; }
+
+.checker {
+  height: 12px; margin: 30px 0 0;
+  background-image:
+    linear-gradient(45deg, var(--ink) 25%, transparent 25%, transparent 75%, var(--ink) 75%),
+    linear-gradient(45deg, var(--ink) 25%, transparent 25%, transparent 75%, var(--ink) 75%);
+  background-size: 16px 16px; background-position: 0 0, 8px 8px; opacity: .85;
+}
+
+/* 목차 */
+.toc { background: var(--card); border: 1px solid var(--line); padding: 18px 22px; margin-top: 30px; }
+.toc ol { margin: 0; padding-left: 20px; columns: 2; column-gap: 30px; font-size: 15px; }
+@media (max-width: 620px) { .toc ol { columns: 1; } }
+.toc li { margin-bottom: 5px; break-inside: avoid; }
+
+section { margin-top: 56px; scroll-margin-top: 20px; }
+h2 {
+  font-family: "Black Han Sans", "Gothic A1", sans-serif;
+  font-weight: 400; font-size: clamp(25px, 4.4vw, 34px);
+  line-height: 1.2; margin: 0 0 8px; text-wrap: balance;
+}
+h2 + .sub { color: var(--ink-3); margin: 0 0 26px; font-size: 15.5px; }
+h3 { font-size: 19px; font-weight: 700; margin: 30px 0 8px; }
+h4 { font-size: 16px; font-weight: 700; margin: 22px 0 6px; color: var(--ink-2); }
+p { margin: 0 0 15px; }
+a { color: var(--kerb); text-underline-offset: 3px; }
+a:focus-visible { outline: 2px solid var(--kerb); outline-offset: 3px; }
+
+.needs { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
+.needs li {
+  display: grid; grid-template-columns: 26px 1fr; gap: 12px; align-items: start;
+  background: var(--card); border: 1px solid var(--line); padding: 14px 16px;
+}
+.tick {
+  width: 22px; height: 22px; border-radius: 50%;
+  background: var(--pit-soft); color: var(--pit);
+  display: grid; place-items: center; font-size: 13px; font-weight: 700; margin-top: 3px;
+}
+.needs b { display: block; }
+.needs span { color: var(--ink-2); font-size: 15px; }
+
+figure { margin: 26px 0; }
+figure svg { width: 100%; height: auto; display: block; }
+figcaption { font-size: 14.5px; color: var(--ink-3); margin-top: 10px; }
+.figbox { background: var(--card); border: 1px solid var(--line); padding: 20px; overflow-x: auto; }
+
+.step {
+  background: var(--card); border: 1px solid var(--line); border-left: 5px solid var(--kerb);
+  padding: 22px var(--pad) 24px 22px; margin-bottom: 16px;
+}
+.step-head { display: grid; grid-template-columns: auto 1fr; gap: 16px; align-items: baseline; margin-bottom: 12px; }
+.step-num {
+  font-family: "Black Han Sans", sans-serif; font-size: 40px; line-height: .9;
+  color: var(--kerb); font-variant-numeric: tabular-nums;
+}
+.step-title { font-size: 21px; font-weight: 700; line-height: 1.3; }
+.step ol, .step ul { margin: 0 0 12px; padding-left: 22px; }
+.step li { margin-bottom: 7px; }
+.step p:last-child, .step ul:last-child, .step ol:last-child { margin-bottom: 0; }
+
+.why { background: var(--card-2); border-left: 3px solid var(--ink-3); padding: 11px 14px; margin: 14px 0 0; font-size: 15px; color: var(--ink-2); }
+.why b { color: var(--ink); }
+.warn { background: var(--flag-soft); border-left: 3px solid var(--flag); padding: 11px 14px; margin: 14px 0 0; font-size: 15px; }
+.warn b { color: var(--flag); }
+.good { background: var(--pit-soft); border-left: 3px solid var(--pit); padding: 11px 14px; margin: 14px 0 0; font-size: 15px; }
+.good b { color: var(--pit); }
+
+.tablewrap { overflow-x: auto; border: 1px solid var(--line); background: var(--card); margin-bottom: 6px; }
+table { border-collapse: collapse; width: 100%; min-width: 520px; font-size: 15px; }
+th, td { text-align: left; padding: 10px 15px; border-bottom: 1px solid var(--line-soft); vertical-align: top; }
+th { font-size: 12.5px; letter-spacing: .04em; color: var(--ink-3); font-weight: 700; background: var(--card-2); border-bottom: 1px solid var(--line); }
+tbody tr:last-child td { border-bottom: 0; }
+td.num, td.mono { font-family: "IBM Plex Mono", monospace; font-variant-numeric: tabular-nums; white-space: nowrap; }
+td.name { font-weight: 700; }
+
+.levels { display: grid; gap: 12px; }
+@media (min-width: 720px) { .levels { grid-template-columns: repeat(3, 1fr); } }
+.level { background: var(--card); border: 1px solid var(--line); padding: 18px; }
+.level h4 { margin: 0 0 4px; font-size: 20px; font-weight: 700; color: var(--ink); font-family: "Black Han Sans", "Gothic A1", sans-serif; }
+.level .who { font-size: 14px; color: var(--ink-3); margin: 0 0 12px; }
+.bar { height: 7px; background: var(--card-2); margin-bottom: 12px; }
+.bar span { display: block; height: 100%; background: var(--kerb); }
+.level dl { margin: 0; font-size: 14.5px; }
+.level dt { color: var(--ink-3); float: left; clear: left; }
+.level dd { margin: 0 0 2px; text-align: right; font-family: "IBM Plex Mono", monospace; }
+
+pre.code {
+  background: var(--card); border: 1px solid var(--line); border-left: 3px solid var(--pit);
+  padding: 16px 18px; overflow-x: auto; margin: 14px 0;
+  font-family: "IBM Plex Mono", monospace; font-size: 13.5px; line-height: 1.7;
+}
+
+.final { background: var(--kerb-soft); border: 1px solid var(--kerb); padding: 24px var(--pad) 26px 22px; margin-top: 40px; }
+.final h2 { margin-bottom: 12px; }
+
+footer { margin-top: 56px; padding-top: 20px; border-top: 1px solid var(--line); font-size: 13.5px; color: var(--ink-3); }
+footer p { margin: 0 0 8px; }
+
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+</style>
+
+<div class="wrap">
+
+<header>
+  <div class="eyebrow">Racing AI 플러그인 · 사용 설명서</div>
+  <h1>AI 레이서 만들기</h1>
+  <p class="lede">
+    내가 만든 트랙 위에서, 컴퓨터가 운전하는 자동차 친구들을 달리게 하는 방법이에요.
+    순서대로 따라 하면 됩니다.
+  </p>
+  <div class="checker"></div>
+
+  <nav class="toc">
+    <ol>
+      <li><a href="#what">이게 뭐예요?</a></li>
+      <li><a href="#needs">준비물</a></li>
+      <li><a href="#how">어떻게 작동하나요</a></li>
+      <li><a href="#install">설치하기 (6단계)</a></li>
+      <li><a href="#contract">드라이빙 담당자와의 약속</a></li>
+      <li><a href="#levels">난이도 세 가지</a></li>
+      <li><a href="#trouble">문제가 생기면</a></li>
+      <li><a href="#reference">전체 속성 목록</a></li>
+      <li><a href="#credits">출처와 크레딧</a></li>
+    </ol>
+  </nav>
+</header>
+
+<section id="what">
+  <h2>이게 뭐예요?</h2>
+  <p class="sub">한 문단으로 설명하면</p>
+  <p>
+    트랙 위에 <strong>눈에 보이지 않는 선</strong>을 하나 그려 둡니다.
+    그러면 AI 자동차들이 그 선을 따라 달려요. 굽은 길이 나오면 <strong>미리 알아서 속도를 줄이고</strong>,
+    앞에 느린 차가 있으면 <strong>옆으로 비켜서 지나갑니다</strong>.
+  </p>
+  <p>
+    사람이 운전하는 차가 너무 뒤처지면 AI가 살짝 기다려 주기도 해요.
+    행사장에서 처음 게임을 해 보는 사람도 재미있게 겨룰 수 있도록요.
+  </p>
+  <div class="why">
+    <b>이 플러그인이 하지 않는 일.</b> 자동차를 굴러가게 만드는 일(엔진, 서스펜션, 바퀴)은
+    하지 않습니다. 그건 드라이빙 시스템의 몫이에요. 이 플러그인은 <b>핸들·엑셀·브레이크를
+    대신 조작해 주는 운전자</b>일 뿐입니다.
+  </div>
+</section>
+
+<section id="needs">
+  <h2>준비물</h2>
+  <p class="sub">시작하기 전에 이 네 가지가 있어야 해요</p>
+  <ul class="needs">
+    <li><span class="tick">1</span><div><b>언리얼 엔진 5.7</b><span>이 플러그인은 5.7에서 만들었어요.</span></div></li>
+    <li><span class="tick">2</span><div><b>Chaos Vehicles 플러그인 켜기</b><span>편집 → 플러그인 에서 검색해 체크하세요. 자동차를 굴러가게 해 주는 엔진 기본 기능이에요.</span></div></li>
+    <li><span class="tick">3</span><div><b>달릴 수 있는 자동차</b><span>이미 운전해 본 자동차 블루프린트가 하나 있어야 해요. <b>반드시 Pawn</b>이어야 합니다.</span></div></li>
+    <li><span class="tick">4</span><div><b>트랙</b><span>길이 이어져서 한 바퀴 돌 수 있는 코스요.</span></div></li>
+  </ul>
+
+  <div class="warn" style="margin-top:16px">
+    <b>왜 Pawn이어야 하나요?</b> 이건 이 플러그인이 정한 규칙이 아니라 언리얼 엔진의 규칙이에요.
+    Chaos 자동차 부품(<code>UChaosVehicleMovementComponent</code>)이 <code>UPawnMovementComponent</code>를
+    물려받았고, 그 안에 &ldquo;Pawn이 주인일 때만 작동한다&rdquo;는 검사가 들어 있습니다. 바꿀 수 없습니다.
+  </div>
+</section>
+
+<section id="how">
+  <h2>어떻게 작동하나요</h2>
+  <p class="sub">그림 두 장이면 이해할 수 있어요</p>
+
+  <div class="figbox">
+    <figure>
+      <svg viewBox="0 0 720 260" role="img" aria-label="직선에서 곡선으로 이어지는 트랙. 자동차가 코너에 닿기 훨씬 전부터 속도를 줄인다.">
+        <path d="M 40 200 L 380 200 A 130 130 0 0 0 510 70 L 510 40" fill="none" stroke="var(--road)" stroke-width="62" stroke-linecap="round"/>
+        <path d="M 40 200 L 380 200 A 130 130 0 0 0 510 70 L 510 40" fill="none" stroke="var(--kerb)" stroke-width="2.5" stroke-dasharray="9 8"/>
+        <g font-family="IBM Plex Mono, monospace" font-size="13" font-weight="500">
+          <circle cx="90" cy="200" r="7" fill="var(--pit)"/>
+          <text x="90" y="176" fill="var(--ink)" text-anchor="middle">빠름</text>
+          <circle cx="250" cy="200" r="7" fill="var(--flag)"/>
+          <text x="250" y="176" fill="var(--ink)" text-anchor="middle">줄이는 중</text>
+          <circle cx="486" cy="118" r="7" fill="var(--kerb)"/>
+          <text x="486" y="150" fill="var(--ink)" text-anchor="middle">느림</text>
+        </g>
+        <line x1="300" y1="150" x2="300" y2="250" stroke="var(--ink-3)" stroke-width="1.5" stroke-dasharray="4 4"/>
+        <text x="296" y="142" font-family="Gothic A1, sans-serif" font-size="13" fill="var(--ink-2)" text-anchor="end">여기서 미리 브레이크</text>
+        <path d="M 44 232 L 120 232" stroke="var(--ink-3)" stroke-width="1.5"/>
+        <path d="M 120 232 l -7 -4 v 8 z" fill="var(--ink-3)"/>
+        <text x="128" y="237" font-family="Gothic A1, sans-serif" font-size="13" fill="var(--ink-3)">진행 방향</text>
+      </svg>
+      <figcaption>
+        AI는 앞쪽 길이 얼마나 굽었는지 계속 살펴봐요. 굽은 길이 보이면 <strong>도착하기 훨씬 전부터</strong> 속도를 줄입니다.
+        그래서 &ldquo;여기서 브레이크&rdquo; 표지판을 손으로 놓아 줄 필요가 없어요.
+      </figcaption>
+    </figure>
+  </div>
+
+  <div class="figbox" style="margin-top:14px">
+    <figure>
+      <svg viewBox="0 0 720 190" role="img" aria-label="느린 차 뒤의 AI가 옆으로 비켜서 지나간 뒤 다시 선으로 돌아온다.">
+        <path d="M 40 120 L 680 120" fill="none" stroke="var(--road)" stroke-width="76" stroke-linecap="round"/>
+        <line x1="40" y1="120" x2="680" y2="120" stroke="var(--kerb)" stroke-width="2.5" stroke-dasharray="9 8"/>
+        <rect x="352" y="108" width="34" height="24" rx="4" fill="var(--ink-3)"/>
+        <text x="369" y="163" font-family="Gothic A1, sans-serif" font-size="13" fill="var(--ink-2)" text-anchor="middle">느린 차</text>
+        <path d="M 120 120 C 230 120, 250 92, 300 92 L 440 92 C 490 92, 510 120, 620 120" fill="none" stroke="var(--pit)" stroke-width="3"/>
+        <path d="M 620 120 l -9 -5 v 10 z" fill="var(--pit)"/>
+        <rect x="128" y="108" width="34" height="24" rx="4" fill="var(--pit)"/>
+        <text x="145" y="163" font-family="Gothic A1, sans-serif" font-size="13" fill="var(--pit)" text-anchor="middle">AI</text>
+        <line x1="300" y1="92" x2="300" y2="120" stroke="var(--ink-3)" stroke-width="1.5"/>
+        <text x="310" y="82" font-family="Gothic A1, sans-serif" font-size="13" fill="var(--ink-2)">옆으로 이만큼</text>
+      </svg>
+      <figcaption>
+        옆으로 충분히 벌어지면 &ldquo;다른 차선에 있다&rdquo;고 판단하고 속도를 줄이지 않고 지나갑니다.
+        지나간 뒤에는 다시 원래 선으로 돌아와요.
+      </figcaption>
+    </figure>
+  </div>
+</section>
+
+<section id="install">
+  <h2>설치하기</h2>
+  <p class="sub">여섯 단계예요. 순서를 지켜 주세요 &mdash; 선을 먼저 그려야 자동차를 놓을 수 있어요.</p>
+
+  <div class="step">
+    <div class="step-head"><div class="step-num">1</div><div class="step-title">플러그인 넣기</div></div>
+    <ol>
+      <li><code>RacingAI</code> 폴더를 통째로 복사해서 내 프로젝트의 <code>Plugins</code> 폴더에 붙여넣기</li>
+      <li>프로젝트를 다시 켜기 (C++ 프로젝트면 다시 빌드)</li>
+      <li>편집 → 플러그인에서 <strong>Chaos Vehicles</strong>가 켜져 있는지 확인</li>
+    </ol>
+    <div class="why"><b>확인 방법.</b> 콘텐츠 브라우저 왼쪽 목록에 <strong>Racing AI</strong> 폴더가 보이면 성공이에요.</div>
+  </div>
+
+  <div class="step">
+    <div class="step-head"><div class="step-num">2</div><div class="step-title">트랙에 선 그리기</div></div>
+    <ol>
+      <li>배치 메뉴에서 <strong>Racing Spline</strong>을 찾아 트랙 위에 끌어다 놓기</li>
+      <li>점을 하나씩 찍어서 트랙 한가운데를 따라 한 바퀴 그리기 (Alt를 누른 채 끝점을 끌면 점이 늘어나요)</li>
+      <li>디테일 창에서 <strong>Closed Loop</strong>를 체크 &mdash; 처음과 끝을 이어 줍니다</li>
+      <li><strong>Track Half Width</strong>에 길 절반 너비를 넣기 (길이 14m면 700)</li>
+    </ol>
+    <div class="why">
+      <b>점은 촘촘하게!</b> 굽은 곳에 점이 너무 적으면 선이 출렁여서 AI가 이상하게 달려요.
+      테스트 트랙은 굽은 곳에 5도마다 점을 찍었습니다.
+    </div>
+    <div class="warn">
+      <b>숫자 단위는 cm예요.</b> 언리얼에서 1은 1cm입니다. 700은 7미터예요.
+      그리고 <b>Closed Loop을 안 켜면 바퀴 수가 세어지지 않아요.</b>
+      높낮이가 있는 트랙이면 점을 <b>노면 높이에 맞춰</b> 찍어 주세요.
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-head"><div class="step-num">3</div><div class="step-title">출발선 놓기</div></div>
+    <ol>
+      <li>배치 메뉴에서 <strong>Race Grid Spawner</strong>를 아무 데나 놓기</li>
+      <li><strong>Vehicle Class</strong>에 내 자동차 블루프린트를 넣기</li>
+      <li><strong>Vehicle Input Adapter Class</strong>에 <code>ChaosVehicleInputAdapter</code>를 넣기</li>
+      <li><strong>Grid Slots</strong>에 칸을 필요한 만큼 추가 &mdash; <strong>칸 개수 = AI 자동차 대수</strong></li>
+      <li>칸마다 <strong>Profile</strong>(난이도)과 <strong>Lane Offset</strong>(좌우 위치)을 정하기</li>
+      <li><strong>Pole Distance</strong>에 출발선 위치를 넣기 (선의 시작점부터 잰 거리, cm)</li>
+    </ol>
+    <div class="why">
+      <b>자동차 블루프린트를 여러 개 만들 필요 없어요.</b> 출발선이 게임 시작할 때 자동차를 만들면서
+      운전 부품을 알아서 붙여 줍니다. Lane Offset은 <code>-250</code>, <code>250</code>처럼 번갈아 주면 지그재그로 서요.
+      칸마다 다른 차를 쓰고 싶으면 <strong>Vehicle Class Override</strong>를 채우면 됩니다.
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-head"><div class="step-num">4</div><div class="step-title">사람이 타는 차 등록하기</div></div>
+    <p>출발선의 <strong>Auto Tag Player Pawn</strong>이 켜져 있으면 <strong>아무것도 안 해도 됩니다.</strong> 자동으로 등록돼요.</p>
+    <p>직접 하고 싶다면, 사람이 타는 자동차에 <strong>Race Participant</strong> 부품을 붙이고 <strong>Is Player</strong>를 체크하세요.</p>
+    <div class="why">
+      <b>왜 등록하나요?</b> AI가 &ldquo;사람이 지금 어디쯤 달리고 있나&rdquo;를 알아야
+      너무 앞서갔을 때 기다려 줄 수 있어요. 바퀴 수와 등수도 이걸로 세어집니다.
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-head"><div class="step-num">5</div><div class="step-title">켜 보기</div></div>
+    <ol>
+      <li>출발선의 <strong>Draw Debug</strong>를 체크 &mdash; 화면에 선과 글씨가 보여요</li>
+      <li>Play 누르기</li>
+      <li>3초 세고 AI가 출발하는지 보기</li>
+    </ol>
+    <div class="why">
+      <b>화면에 보이는 것.</b> 청록색 선 = 레이싱 라인, 노란 선 = AI가 가려는 곳,
+      자동차 위 글씨 = 등수, 지금 속도 / 원하는 속도, 기다려 주는 정도.
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-head"><div class="step-num">6</div><div class="step-title">자동차 힘 재기 &mdash; 가장 중요해요</div></div>
+    <p>
+      자동차마다 <strong>굽은 길을 얼마나 빠르게 돌 수 있는지</strong>가 달라요.
+      이 숫자를 안 맞추면 AI가 너무 느리거나, 코너에서 길 밖으로 미끄러집니다.
+    </p>
+    <h3>재는 방법</h3>
+    <ol>
+      <li>넓고 평평한 곳에서 자동차를 <strong>핸들을 끝까지 꺾은 채</strong> 계속 달리게 하기 (동그라미를 그려요)</li>
+      <li>그 동그라미의 <strong>반지름</strong>과 그때의 <strong>속도</strong>를 재기</li>
+      <li>계산: <code>힘 = 속도 &times; 속도 &divide; 반지름</code> (속도는 cm/s, 반지름은 cm)</li>
+    </ol>
+    <p>기본으로 들어 있는 프로필은 이렇게 잰 값을 씁니다.</p>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>잰 것</th><th>값</th></tr></thead>
+        <tbody>
+          <tr><td>동그라미 반지름</td><td class="num">4,580 cm</td></tr>
+          <tr><td>그때 속도</td><td class="num">3,048 cm/s (110 km/h)</td></tr>
+          <tr><td>힘 = 3048 &times; 3048 &divide; 4580</td><td class="num">2,028 cm/s&sup2;</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <h3>숫자 넣기</h3>
+    <p>
+      난이도 파일(<code>DA_Driver_Pro</code> 등)을 열고 <strong>Lateral Accel Budget</strong>에
+      방금 잰 힘의 <strong>절반쯤부터</strong> 넣어 보세요. 그리고 조금씩 올리면서 시험합니다.
+    </p>
+    <div class="warn">
+      <b>같이 봐야 하는 값이 하나 더 있어요.</b> <strong>Min Turn Radius</strong>는
+      &ldquo;주차할 때 도는 반지름&rdquo;이 아니라 <b>달릴 때 핸들을 끝까지 꺾으면 도는 반지름</b>을 넣어야 해요.
+      테스트 차는 4,000이었습니다. 이걸 너무 작게 넣으면 AI가 핸들을 덜 꺾어서 코너에서 밖으로 밀려나요.
+    </div>
+  </div>
+</section>
+
+<section id="contract">
+  <h2>드라이빙 담당자와의 약속</h2>
+  <p class="sub">자동차를 만드는 사람과 AI를 붙이는 사람이 다를 때, 이것만 지키면 됩니다</p>
+
+  <h3>드라이빙 쪽에서 만들어 주면 되는 것</h3>
+  <ul>
+    <li><code>APawn</code>을 물려받은 자동차 블루프린트 하나</li>
+    <li>그 안에 <code>UChaosWheeledVehicleMovementComponent</code> 하나</li>
+  </ul>
+  <p>끝입니다. AI 부품이나 인터페이스를 직접 붙일 필요 없어요. 출발선이 알아서 붙여 줍니다.</p>
+
+  <h3>AI 쪽이 자동차에 하는 일</h3>
+  <pre class="code">SetSteeringInput(-1 ~ 1)     핸들
+SetThrottleInput(0 ~ 1)      엑셀
+SetBrakeInput(0 ~ 1)         브레이크
+SetTargetGear(-1 또는 1)     후진 탈출할 때만</pre>
+
+  <div class="warn">
+    <b>AI가 자동차 설정 두 가지를 바꿉니다.</b> 이걸 드라이빙 쪽에서 되돌리면 AI가 멈춥니다.
+    <ul style="margin:8px 0 0; padding-left:20px">
+      <li><code>bRequiresControllerForInputs = false</code> &mdash; 안 끄면 AI 차는 <b>아예 안 움직여요.</b>
+          Chaos는 원래 컨트롤러가 탄 차의 입력만 받거든요.</li>
+      <li><code>bReverseAsBrake = false</code> &mdash; 안 끄면 AI가 감속하려고 브레이크를 밟을 때마다
+          <b>기어가 후진으로 바뀝니다.</b></li>
+    </ul>
+  </div>
+
+  <div class="warn">
+    <b>드라이빙 쪽에서 하면 안 되는 것.</b> Tick(매 프레임)에서 <code>SetSteeringInput</code> 같은
+    입력을 덮어쓰지 마세요. AI가 넣은 값이 지워집니다. 플레이어 입력은 사람이 타는 차에서만 처리하세요.
+  </div>
+
+  <h3>Chaos가 아닌 다른 물리를 쓴다면</h3>
+  <p>
+    <code>IRacingVehicleInput</code> 인터페이스를 블루프린트나 C++로 구현하고
+    <strong>Apply Steering / Apply Throttle / Apply Brake</strong> 세 이벤트를 채우면 됩니다.
+    그리고 출발선의 <strong>Vehicle Input Adapter Class</strong>는 비워 두세요.
+  </p>
+
+  <div class="good">
+    <b>자동차 블루프린트를 AI마다 따로 만들어야 하나요?</b> 아니요.
+    AI 세 대의 차이는 <b>난이도 프로필과 좌우 위치</b>뿐이고, 둘 다 출발선의 Grid Slots에 들어 있습니다.
+    블루프린트를 3개로 나누면 드라이빙 쪽이 자동차를 고칠 때마다 3곳을 고쳐야 해요.
+    <b>다만 차 색깔이나 외형을 다르게 하고 싶다면</b> 그때는 얇은 자식 블루프린트를 만들고
+    Grid Slot의 <b>Vehicle Class Override</b>로 지정하세요. 그 안에 AI 설정은 넣지 마세요.
+  </div>
+</section>
+
+<section id="levels">
+  <h2>난이도 세 가지</h2>
+  <p class="sub">함께 들어 있는 프로필입니다. 자동차가 다르면 6단계로 다시 재야 해요.</p>
+  <div class="levels">
+    <div class="level">
+      <h4>Rookie</h4>
+      <p class="who">처음 해 보는 손님용</p>
+      <div class="bar"><span style="width:46%"></span></div>
+      <dl><dt>코너 힘</dt><dd>46%</dd><dt>기다려 주기</dt><dd>0.85</dd><dt>코너 속도</dt><dd>76 km/h</dd></dl>
+    </div>
+    <div class="level">
+      <h4>Advanced</h4>
+      <p class="who">게임을 좀 해 본 사람</p>
+      <div class="bar"><span style="width:58%"></span></div>
+      <dl><dt>코너 힘</dt><dd>58%</dd><dt>기다려 주기</dt><dd>0.60</dd><dt>코너 속도</dt><dd>89 km/h</dd></dl>
+    </div>
+    <div class="level">
+      <h4>Pro</h4>
+      <p class="who">잘하는 사람</p>
+      <div class="bar"><span style="width:70%"></span></div>
+      <dl><dt>코너 힘</dt><dd>70%</dd><dt>기다려 주기</dt><dd>0.40</dd><dt>코너 속도</dt><dd>101 km/h</dd></dl>
+    </div>
+  </div>
+  <div class="why" style="margin-top:16px">
+    <b>&ldquo;기다려 주기&rdquo;가 뭔가요?</b> <strong>Catch Up Strength</strong>라는 값이에요.
+    사람이 뒤처지면 AI가 살짝 천천히 가고, 사람이 앞서면 조금 더 빨리 달려요.
+    행사장에서는 이 값이 재미를 가장 크게 좌우합니다. <code>0</code>으로 두면 봐주지 않아요.
+  </div>
+</section>
+
+<section id="trouble">
+  <h2>문제가 생기면</h2>
+  <p class="sub">자주 나오는 다섯 가지예요</p>
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th style="width:34%">증상</th><th>고치는 법</th></tr></thead>
+      <tbody>
+        <tr><td class="name">자동차가 아예 안 움직여요</td>
+            <td>출발선의 <strong>Vehicle Input Adapter Class</strong>가 비어 있는지 보세요.
+                이게 없으면 AI가 생각만 하고 핸들을 못 잡아요.
+                드라이빙 쪽에서 <code>bRequiresControllerForInputs</code>를 되돌리지 않았는지도 확인하세요.</td></tr>
+        <tr><td class="name">코너에서 길 밖으로 밀려나요</td>
+            <td>먼저 화면에서 <strong>핸들이 끝까지 꺾였는지</strong> 보세요.
+                덜 꺾였으면 <strong>Min Turn Radius</strong>를 키우고,
+                끝까지 꺾었는데도 밀리면 <strong>Lateral Accel Budget</strong>을 낮추세요.</td></tr>
+        <tr><td class="name">너무 느려요</td>
+            <td><strong>Lateral Accel Budget</strong>을 올리세요. 직선도 느리면 <strong>Max Speed</strong>를 확인하세요.</td></tr>
+        <tr><td class="name">느린 차 뒤에서 머뭇거려요</td>
+            <td><strong>Passing Lateral Clearance</strong>를 자동차 폭보다 조금 크게 맞추세요.
+                너무 크면 비켜설 자리가 없다고 판단해서 못 지나갑니다.</td></tr>
+        <tr><td class="name">바퀴 수가 안 세어져요</td>
+            <td>선의 <strong>Closed Loop</strong>이 꺼져 있어요. 켜 주세요.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section id="reference">
+  <h2>전체 속성 목록</h2>
+  <p class="sub">에디터 디테일 창에 보이는 이름 그대로예요. 단위는 모두 cm, cm/s, cm/s&sup2;, 초입니다.</p>
+
+  <h3>Racing Spline &mdash; 트랙</h3>
+  <div class="tablewrap"><table>
+    <thead><tr><th style="width:30%">이름</th><th style="width:14%">기본값</th><th>설명</th></tr></thead>
+    <tbody>
+      <tr><td class="name">Track Half Width</td><td class="num">500</td><td>중심선에서 좌우로 허용되는 폭. 추월 오프셋이 이 안으로 제한됩니다</td></tr>
+      <tr><td class="name">Curvature Sample Step</td><td class="num">200</td><td>굽은 정도를 재는 간격. 촘촘할수록 정확하지만 메모리를 더 씁니다</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>Race Grid Spawner &mdash; 출발선</h3>
+  <div class="tablewrap"><table>
+    <thead><tr><th style="width:30%">이름</th><th style="width:14%">기본값</th><th>설명</th></tr></thead>
+    <tbody>
+      <tr><td class="name">Vehicle Class</td><td class="num">&mdash;</td><td>스폰할 자동차 블루프린트. Pawn이어야 합니다</td></tr>
+      <tr><td class="name">Vehicle Input Adapter Class</td><td class="num">&mdash;</td><td>Chaos면 <code>ChaosVehicleInputAdapter</code></td></tr>
+      <tr><td class="name">Grid Slots</td><td class="num">비어 있음</td><td>칸 개수 = AI 대수. 칸마다 Profile / Driver Name / Lane Offset / Vehicle Class Override</td></tr>
+      <tr><td class="name">Pole Distance</td><td class="num">0</td><td>선 시작점부터 잰 폴 포지션 위치</td></tr>
+      <tr><td class="name">Row Spacing</td><td class="num">900</td><td>앞뒤 그리드 간격</td></tr>
+      <tr><td class="name">Spawn Height</td><td class="num">80</td><td>스폰할 때 지면 위로 띄울 높이</td></tr>
+      <tr><td class="name">Auto Start</td><td class="num">켜짐</td><td>끄면 <code>Start Race</code>를 직접 호출해야 합니다</td></tr>
+      <tr><td class="name">Countdown Seconds</td><td class="num">3</td><td>출발까지 기다리는 시간</td></tr>
+      <tr><td class="name">Auto Tag Player Pawn</td><td class="num">켜짐</td><td>사람이 타는 차를 자동으로 참가자로 등록</td></tr>
+      <tr><td class="name">Draw Debug</td><td class="num">꺼짐</td><td>레이싱 라인과 AI 상태를 화면에 표시</td></tr>
+      <tr><td class="name">Rubber Banding</td><td class="num">켜짐</td><td>사람을 기다려 주는 기능 전체 on/off</td></tr>
+      <tr><td class="name">Max AI Updates Per Frame</td><td class="num">1</td><td>한 프레임에 갱신할 AI 수. 대수가 많아도 프레임 비용이 균일합니다</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>Racing AI Profile &mdash; 난이도 (핸들)</h3>
+  <div class="tablewrap"><table>
+    <thead><tr><th style="width:30%">이름</th><th style="width:14%">기본값</th><th>설명</th></tr></thead>
+    <tbody>
+      <tr><td class="name">Lookahead Seconds</td><td class="num">0.8</td><td>몇 초 앞을 보는지. 거리가 아니라 시간이라 저속·고속 모두 안정적입니다</td></tr>
+      <tr><td class="name">Min Lookahead</td><td class="num">400</td><td>전방 주시 거리의 하한</td></tr>
+      <tr><td class="name">Max Lookahead</td><td class="num">4000</td><td>전방 주시 거리의 상한</td></tr>
+      <tr><td class="name">Max Steering Rate</td><td class="num">2.5</td><td>초당 핸들 변화량. 2.5면 끝까지 꺾는 데 0.4초</td></tr>
+      <tr><td class="name">Min Turn Radius</td><td class="num">600</td><td><b>달릴 때</b> 핸들을 끝까지 꺾으면 도는 반지름. 반드시 실측하세요</td></tr>
+      <tr><td class="name">Steering Gain</td><td class="num">1.0</td><td>핸들 출력 최종 배율</td></tr>
+      <tr><td class="name">Lateral Offset Rate</td><td class="num">300</td><td>차선을 바꾸는 속도</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>Racing AI Profile &mdash; 난이도 (속도)</h3>
+  <div class="tablewrap"><table>
+    <thead><tr><th style="width:30%">이름</th><th style="width:14%">기본값</th><th>설명</th></tr></thead>
+    <tbody>
+      <tr><td class="name">Lateral Accel Budget</td><td class="num">1100</td><td>코너를 얼마나 세게 돌지. <b>가장 중요한 값</b></td></tr>
+      <tr><td class="name">Braking Decel</td><td class="num">900</td><td>제동 감속도. 코너 진입 제동 시점을 역산하는 데 씁니다</td></tr>
+      <tr><td class="name">Speed Margin</td><td class="num">0.95</td><td>목표 속도에 곱하는 여유. 1보다 작으면 보수적으로 탑니다</td></tr>
+      <tr><td class="name">Max Speed</td><td class="num">0</td><td>직선 최고 속도. 0이면 제한 없음</td></tr>
+      <tr><td class="name">Speed Control Gain</td><td class="num">0.004</td><td>속도 오차를 엑셀·브레이크로 바꾸는 세기</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>Racing AI Profile &mdash; 추월</h3>
+  <div class="tablewrap"><table>
+    <thead><tr><th style="width:30%">이름</th><th style="width:14%">기본값</th><th>설명</th></tr></thead>
+    <tbody>
+      <tr><td class="name">Overtake Scan Distance</td><td class="num">3000</td><td>앞차를 인지하기 시작하는 거리</td></tr>
+      <tr><td class="name">Overtake Lateral Offset</td><td class="num">250</td><td>추월할 때 비켜설 거리</td></tr>
+      <tr><td class="name">Overtake Speed Ratio</td><td class="num">0.95</td><td>앞차가 이 비율보다 느릴 때만 추월 시도</td></tr>
+      <tr><td class="name">Follow Gap</td><td class="num">700</td><td>같은 차선 앞차와 유지할 간격</td></tr>
+      <tr><td class="name">Passing Lateral Clearance</td><td class="num">240</td><td>다른 차선으로 인정하는 좌우 간격. 차 폭보다 조금 넉넉하게</td></tr>
+      <tr><td class="name">Min Overtake Speed</td><td class="num">650</td><td>비켜설 때 유지하는 최소 속도. 멈춘 차는 옆으로 못 가니까요</td></tr>
+      <tr><td class="name">Hard Stop Gap</td><td class="num">420</td><td>같은 차선에서 절대 더 좁히지 않는 간격 (추돌 방지)</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>Racing AI Profile &mdash; 기다려 주기와 플레이어 배려</h3>
+  <div class="tablewrap"><table>
+    <thead><tr><th style="width:30%">이름</th><th style="width:14%">기본값</th><th>설명</th></tr></thead>
+    <tbody>
+      <tr><td class="name">Catch Up Strength</td><td class="num">0.6</td><td>기다려 주는 정도. 0이면 끔</td></tr>
+      <tr><td class="name">Max Speed Up</td><td class="num">0.15</td><td>뒤처졌을 때 허용할 최대 가속 비율</td></tr>
+      <tr><td class="name">Max Slow Down</td><td class="num">0.20</td><td>앞섰을 때 허용할 최대 감속 비율</td></tr>
+      <tr><td class="name">Neutral Gap</td><td class="num">1500</td><td>이 안에서는 보정하지 않음 (접전 구간을 흔들지 않기 위해)</td></tr>
+      <tr><td class="name">Full Effect Gap</td><td class="num">12000</td><td>보정이 최대가 되는 격차</td></tr>
+      <tr><td class="name">Player Extra Clearance</td><td class="num">150</td><td>사람 차에게 추가로 벌리는 여유. <b>VR이면 넉넉하게</b></td></tr>
+      <tr><td class="name">Player Yield Distance</td><td class="num">1500</td><td>사람을 배려하기 시작하는 거리</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>Racing AI Profile &mdash; 복구</h3>
+  <div class="tablewrap"><table>
+    <thead><tr><th style="width:30%">이름</th><th style="width:14%">기본값</th><th>설명</th></tr></thead>
+    <tbody>
+      <tr><td class="name">Stuck Speed Threshold</td><td class="num">60</td><td>이 속도 미만이면 갇힘 판정 타이머가 돕니다</td></tr>
+      <tr><td class="name">Stuck Time to Reverse</td><td class="num">1.5</td><td>갇힘으로 판정하기까지의 시간</td></tr>
+      <tr><td class="name">Reverse Duration</td><td class="num">1.2</td><td>후진을 유지하는 시간</td></tr>
+      <tr><td class="name">Flipped Angle Degrees</td><td class="num">70</td><td>뒤집힘으로 판정할 기울기</td></tr>
+      <tr><td class="name">Flipped Time to Respawn</td><td class="num">2.5</td><td>뒤집힌 채 이 시간이 지나면 트랙 위로 되돌립니다</td></tr>
+      <tr><td class="name">Off Track Respawn Distance</td><td class="num">4000</td><td>트랙에서 이만큼 벗어나면 되돌립니다. 0이면 끔</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>Race Participant &mdash; 참가자 (사람 차에 붙임)</h3>
+  <div class="tablewrap"><table>
+    <thead><tr><th style="width:30%">이름</th><th style="width:14%">기본값</th><th>설명</th></tr></thead>
+    <tbody>
+      <tr><td class="name">Is Player</td><td class="num">꺼짐</td><td>사람이 타는 차면 켜세요. 기다려 주기의 기준이 됩니다</td></tr>
+      <tr><td class="name">Display Name</td><td class="num">비어 있음</td><td>순위표에 표시할 이름</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>Chaos Vehicle Input Adapter &mdash; 연결 부품</h3>
+  <div class="tablewrap"><table>
+    <thead><tr><th style="width:30%">이름</th><th style="width:14%">기본값</th><th>설명</th></tr></thead>
+    <tbody>
+      <tr><td class="name">Use Automatic Gears</td><td class="num">켜짐</td><td>자동 변속 사용</td></tr>
+      <tr><td class="name">Disable Controller Requirement</td><td class="num">켜짐</td><td><b>켜 두세요.</b> 끄면 AI 차가 아예 안 움직입니다</td></tr>
+      <tr><td class="name">Disable Reverse as Brake</td><td class="num">켜짐</td><td><b>켜 두세요.</b> 끄면 감속할 때마다 후진 기어로 바뀝니다</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section id="credits">
+  <h2>출처와 크레딧</h2>
+  <p class="sub">이 플러그인이 무엇으로 만들어졌는지</p>
+
+  <h4>플러그인 코드와 에셋</h4>
+  <p>
+    C++ 소스와 함께 들어 있는 에셋(난이도 프로필, 물리 머티리얼, 테스트 맵)은
+    <strong>이 프로젝트를 위해 새로 작성</strong>했습니다. 외부 코드를 복사해 오지 않았습니다.
+  </p>
+
+  <h4>설계 참고</h4>
+  <p>
+    같은 저장소의 <code>Content/RacingAI</code> 블루프린트 팩이 어떤 동작을 하는지 분석해
+    <strong>동작 명세로만 참고</strong>했습니다. 노드, 그래프, 에셋을 가져오지 않았고
+    구현은 전부 새로 했습니다. 그 팩 자체는 이 플러그인과 무관하며,
+    플러그인을 다른 프로젝트로 옮길 때 함께 옮길 필요가 없습니다.
+  </p>
+
+  <h4>테스트에 사용한 자동차</h4>
+  <p>
+    함께 들어 있는 테스트 맵은 언리얼 엔진 Vehicle 템플릿의
+    <code>BP_SportsCar_Pawn</code>과 <code>BP_VehicleAdvGameMode</code>를 참조합니다.
+    저작권은 Epic Games에 있으며 이 플러그인에 포함되어 있지 않습니다.
+    <strong>다른 프로젝트에서는 이 두 곳만 자기 것으로 바꾸면 됩니다.</strong>
+  </p>
+
+  <h4>이 문서에 쓴 글꼴</h4>
+  <p>
+    Black Han Sans, Gothic A1, IBM Plex Mono &mdash; 모두 SIL Open Font License로 배포되는
+    Google Fonts 서체입니다.
+  </p>
+
+  <h4>표에 있는 측정값</h4>
+  <p>
+    자동차 힘(2,028 cm/s&sup2;)과 회전 반경(4,580 cm)은 Chaos 템플릿 스포츠카를
+    실제로 원 선회시켜 궤적에 원을 맞춰 계산한 값입니다. 추정치가 아닙니다.
+    <strong>다른 자동차에는 그대로 쓸 수 없습니다.</strong>
+  </p>
+</section>
+
+<div class="final">
+  <h2>다 됐어요</h2>
+  <p style="margin-bottom:10px">
+    선을 그리고, 출발선을 놓고, 자동차 힘을 한 번 재면 끝입니다.
+    나머지는 달려 보면서 숫자를 조금씩 고치면 돼요.
+  </p>
+  <p style="margin:0">
+    <strong>딱 하나만 기억한다면:</strong> 새 자동차를 쓸 때마다
+    <strong>6단계(자동차 힘 재기)</strong>를 다시 하세요. 이걸 건너뛰면 AI가 느리거나 미끄러집니다.
+  </p>
+</div>
+
+<footer>
+  <p>Racing AI 플러그인 · 언리얼 엔진 5.7 · 모듈 2개 (RacingAI, RacingAIChaos)</p>
+  <p>코어 모듈은 Core / CoreUObject / Engine 에만 의존합니다. Chaos 의존은 어댑터 모듈에만 있습니다.</p>
+</footer>
+
+</div>

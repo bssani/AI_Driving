@@ -1,0 +1,29 @@
+{
+	"FileVersion": 3,
+	"Version": 1,
+	"VersionName": "0.1",
+	"FriendlyName": "Racing AI",
+	"Description": "레이싱 AI 상대 차량. 스플라인 레이싱 라인 추종, 곡률 기반 속도 제어, 러버밴딩, 추월 중재를 제공합니다. 코어 모듈은 차량 물리에 의존하지 않습니다.",
+	"Category": "Gameplay",
+	"CreatedBy": "",
+	"CanContainContent": true,
+	"Installed": false,
+	"Modules": [
+		{
+			"Name": "RacingAI",
+			"Type": "Runtime",
+			"LoadingPhase": "Default"
+		},
+		{
+			"Name": "RacingAIChaos",
+			"Type": "Runtime",
+			"LoadingPhase": "Default"
+		}
+	],
+	"Plugins": [
+		{
+			"Name": "ChaosVehiclesPlugin",
+			"Enabled": true
+		}
+	]
+}

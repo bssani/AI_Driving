@@ -73,3 +73,9 @@ Plugins/**/Intermediate/*
 
 # Cache files for the editor to use
 DerivedDataCache/*
+
+# UnrealAgent - 로컬 개발용 에디터 에이전트 도구. 저장소에 포함하지 않습니다.
+Plugins/UnrealAgent/
+
+# .NET 빌드 중간 산출물
+obj/
