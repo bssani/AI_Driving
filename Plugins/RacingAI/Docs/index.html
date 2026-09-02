@@ -194,6 +194,8 @@ footer p { margin: 0 0 8px; }
       <li><a href="#needs">준비물</a></li>
       <li><a href="#how">어떻게 작동하나요</a></li>
       <li><a href="#install">설치하기 (6단계)</a></li>
+      <li><a href="#race">레이스 진행과 이벤트</a></li>
+      <li><a href="#controls">조작 키와 운영 흐름</a></li>
       <li><a href="#contract">드라이빙 담당자와의 약속</a></li>
       <li><a href="#levels">난이도 세 가지</a></li>
       <li><a href="#trouble">문제가 생기면</a></li>
@@ -312,10 +314,17 @@ footer p { margin: 0 0 8px; }
       <li>점을 하나씩 찍어서 트랙 한가운데를 따라 한 바퀴 그리기 (Alt를 누른 채 끝점을 끌면 점이 늘어나요)</li>
       <li>디테일 창에서 <strong>Closed Loop</strong>를 체크 &mdash; 처음과 끝을 이어 줍니다</li>
       <li><strong>Track Half Width</strong>에 길 절반 너비를 넣기 (길이 14m면 700)</li>
+      <li><strong>Finish Line Distance</strong>에 결승선 위치를 넣기 (선의 시작점부터 잰 거리, cm)</li>
     </ol>
     <div class="why">
       <b>점은 촘촘하게!</b> 굽은 곳에 점이 너무 적으면 선이 출렁여서 AI가 이상하게 달려요.
       테스트 트랙은 굽은 곳에 5도마다 점을 찍었습니다.
+    </div>
+    <div class="why">
+      <b>결승선을 꼭 정하세요.</b> 랩 수, 등수, 완주 판정이 전부 이 지점을 기준으로 돌아갑니다.
+      0으로 두면 선이 시작하는 자리가 결승선이 되는데, 출발 그리드도 거기에 두면
+      <b>한 바퀴 돌고 출발한 자리에서 멈추는</b> 것처럼 보입니다.
+      출발 지점과 결승 지점을 다르게 하고 싶다면 이 값을 옮기세요.
     </div>
     <div class="warn">
       <b>숫자 단위는 cm예요.</b> 언리얼에서 1은 1cm입니다. 700은 7미터예요.
@@ -332,12 +341,25 @@ footer p { margin: 0 0 8px; }
       <li><strong>Vehicle Input Adapter Class</strong>에 <code>ChaosVehicleInputAdapter</code>를 넣기</li>
       <li><strong>Grid Slots</strong>에 칸을 필요한 만큼 추가 &mdash; <strong>칸 개수 = AI 자동차 대수</strong></li>
       <li>칸마다 <strong>Profile</strong>(난이도)과 <strong>Lane Offset</strong>(좌우 위치)을 정하기</li>
-      <li><strong>Pole Distance</strong>에 출발선 위치를 넣기 (선의 시작점부터 잰 거리, cm)</li>
+      <li>사람이 타는 차도 그리드에 세우려면, 그 칸의 <strong>Occupant</strong>를 <strong>Player</strong>로 바꾸기</li>
+      <li><strong>Pole Distance</strong>에 출발 위치를 넣기 &mdash; <b>결승선을 기준으로</b> 잰 거리입니다</li>
+      <li><strong>Total Laps</strong>에 몇 바퀴 돌지 넣기</li>
     </ol>
     <div class="why">
       <b>자동차 블루프린트를 여러 개 만들 필요 없어요.</b> 출발선이 게임 시작할 때 자동차를 만들면서
       운전 부품을 알아서 붙여 줍니다. Lane Offset은 <code>-250</code>, <code>250</code>처럼 번갈아 주면 지그재그로 서요.
       칸마다 다른 차를 쓰고 싶으면 <strong>Vehicle Class Override</strong>를 채우면 됩니다.
+    </div>
+    <div class="warn">
+      <b>Pole Distance는 결승선 기준입니다.</b>
+      <code>0</code>이면 결승선 위에서 출발하고, <b>음수</b>면 결승선 뒤에서 출발합니다.
+      예를 들어 <code>-25000</code>은 결승선 250m 앞에서 출발한다는 뜻이라,
+      출발해서 한 바퀴를 돌아야 결승선을 통과합니다. 보통은 음수로 두는 게 자연스러워요.
+    </div>
+    <div class="why">
+      <b>칸 순서가 그리드 순서입니다.</b> 0번이 폴 포지션이에요.
+      플레이어를 세 번째에 세우고 싶으면 세 번째 칸을 Player로 두면 됩니다.
+      매번 자리를 섞고 싶으면 <strong>Shuffle Grid Order</strong>를 켜세요.
     </div>
   </div>
 
@@ -353,6 +375,11 @@ footer p { margin: 0 0 8px; }
 
   <div class="step">
     <div class="step-head"><div class="step-num">5</div><div class="step-title">켜 보기</div></div>
+    <div class="warn" style="margin:0 0 12px">
+      <b>Play를 눌러도 바로 출발하지 않습니다.</b> 차들은 그리드에 서서 기다립니다.
+      <b>Enter</b>를 누르면 3, 2, 1 카운트다운이 돌고 출발하며, 그때 플레이어 조작도 풀립니다.
+      바로 출발시키고 싶으면 출발선의 <strong>Auto Start</strong>를 켜세요.
+    </div>
     <ol>
       <li>출발선의 <strong>Draw Debug</strong>를 체크 &mdash; 화면에 선과 글씨가 보여요</li>
       <li>Play 누르기</li>
@@ -397,6 +424,116 @@ footer p { margin: 0 0 8px; }
       &ldquo;주차할 때 도는 반지름&rdquo;이 아니라 <b>달릴 때 핸들을 끝까지 꺾으면 도는 반지름</b>을 넣어야 해요.
       테스트 차는 4,000이었습니다. 이걸 너무 작게 넣으면 AI가 핸들을 덜 꺾어서 코너에서 밖으로 밀려나요.
     </div>
+  </div>
+</section>
+
+<section id="race">
+  <h2>레이스 진행과 이벤트</h2>
+  <p class="sub">메인 프로젝트의 중앙 매니저가 붙잡을 지점입니다</p>
+
+  <p>
+    레이스의 시작, 완주, 다시 시작은 <strong>Race Director</strong>가 관리합니다.
+    월드 서브시스템이라 레벨에 놓을 수 없고, 코드나 블루프린트에서 꺼내 씁니다.
+    출발선(Race Grid Spawner)은 차를 세우는 일만 하고, 진행은 여기가 담당합니다.
+  </p>
+
+  <h3>불러오기</h3>
+  <pre class="code">URaceDirectorSubsystem* Director = GetWorld()-&gt;GetSubsystem&lt;URaceDirectorSubsystem&gt;();</pre>
+  <p>블루프린트에서는 <strong>Get Race Director Subsystem</strong> 노드를 쓰면 됩니다.</p>
+
+  <h3>진행 시키기</h3>
+  <div class="tablewrap"><table>
+    <thead><tr><th style="width:32%">함수</th><th>하는 일</th></tr></thead>
+    <tbody>
+      <tr><td class="name">Set Total Laps</td><td>몇 바퀴 돌지 정합니다. 0이면 완주 판정을 하지 않습니다</td></tr>
+      <tr><td class="name">Start Countdown</td><td>카운트다운을 세고 끝나면 자동으로 출발시킵니다</td></tr>
+      <tr><td class="name">Start Race</td><td>카운트다운 없이 바로 출발</td></tr>
+      <tr><td class="name">Abort Race</td><td>중단. 모든 AI가 멈춥니다</td></tr>
+      <tr><td class="name">Reset Race</td><td><b>모두를 그리드로 되돌리고 대기시킵니다.</b> 출발시키지 않습니다</td></tr>
+      <tr><td class="name">Restart Race</td><td>그리드로 되돌리고 <b>곧바로</b> 카운트다운까지 시작합니다</td></tr>
+      <tr><td class="name">Get Race State</td><td>Idle / Countdown / Racing / Finished / Aborted</td></tr>
+      <tr><td class="name">Get Participants By Position</td><td>등수 순으로 참가자를 돌려줍니다. 완주자가 먼저 옵니다</td></tr>
+    </tbody>
+  </table></div>
+
+  <div class="good">
+    <b>레벨을 다시 로드하지 마세요.</b> <strong>Reset Race</strong>가 차를 그리드로 되돌리고
+    랩·등수·완주 기록을 지웁니다. 행사장에서 2분짜리 레이스를 연달아 돌릴 때,
+    회차마다 레벨을 다시 여는 것과 이 함수 한 번의 차이는 아주 큽니다.
+  </div>
+
+  <h3>소식 받기</h3>
+  <p>아래 이벤트에 바인딩하면 결과 화면, UI, 세션 전환을 처리할 수 있습니다.</p>
+  <div class="tablewrap"><table>
+    <thead><tr><th style="width:32%">이벤트</th><th>언제 오는지</th></tr></thead>
+    <tbody>
+      <tr><td class="name">On Countdown Started</td><td>카운트다운 시작</td></tr>
+      <tr><td class="name">On Countdown Tick</td><td>남은 초가 바뀔 때마다. 3, 2, 1, 0</td></tr>
+      <tr><td class="name">On Race Started</td><td>출발 신호</td></tr>
+      <tr><td class="name">On Lap Completed</td><td>누군가 한 바퀴를 돌 때마다 (참가자, 랩 수)</td></tr>
+      <tr><td class="name">On Racer Finished</td><td>한 명이 완주할 때마다 (참가자, 등수)</td></tr>
+      <tr><td class="name">On Race Finished</td><td>레이스가 끝났을 때</td></tr>
+      <tr><td class="name">On Race Reset</td><td>그리드로 되돌려졌을 때</td></tr>
+    </tbody>
+  </table></div>
+
+  <pre class="code">Director-&gt;OnRacerFinished.AddDynamic(this, &amp;AMyManager::HandleRacerFinished);
+Director-&gt;SetTotalLaps(2);
+Director-&gt;StartCountdown(3.f);
+
+<span class="c">// 다음 손님</span>
+Director-&gt;ResetRace();</pre>
+
+  <div class="warn">
+    <b>레이스가 안 끝날 수 있습니다.</b> 기본값은 <strong>플레이어가 완주하면 종료</strong>입니다.
+    손님이 사고로 멈추면 레이스가 계속 진행 중인 상태로 남습니다.
+    중앙 매니저에서 제한 시간을 두고 <strong>Abort Race</strong>를 부르거나,
+    <strong>End Race When Player Finishes</strong>를 꺼서 전원 완주로 바꾸세요.
+  </div>
+</section>
+
+<section id="controls">
+  <h2>조작 키와 운영 흐름</h2>
+  <p class="sub">출발선 액터가 키를 직접 받습니다. 블루프린트를 만들지 않아도 바로 쓸 수 있어요.</p>
+
+  <div class="tablewrap"><table>
+    <thead><tr><th style="width:16%">키</th><th style="width:22%">함수</th><th>하는 일</th></tr></thead>
+    <tbody>
+      <tr><td class="name">Enter</td><td class="name">Start Race</td><td>카운트다운 3, 2, 1 후 출발. 플레이어 조작이 풀립니다</td></tr>
+      <tr><td class="name">Delete</td><td class="name">Reset Race</td><td>그리드로 되돌리고 <b>대기</b>. 출발시키지 않습니다</td></tr>
+      <tr><td class="name">Backspace</td><td class="name">Restart Race</td><td>그리드로 되돌리고 <b>곧바로</b> 카운트다운</td></tr>
+    </tbody>
+  </table></div>
+  <p style="font-size:14.5px; color:var(--ink-3)">
+    키는 출발선의 <strong>Controls</strong> 항목에서 바꿀 수 있고, <strong>Enable Control Keys</strong>로 끌 수 있습니다.
+  </p>
+
+  <h3>행사장에서의 흐름</h3>
+  <pre class="code">레이스 종료
+   ↓  Delete        차를 제자리로. 그대로 대기
+   ↓                손님 교대, 헤드셋 착용, 자리 확인
+   ↓  Enter         3, 2, 1 → 출발</pre>
+  <div class="good">
+    <b>Reset과 Start를 나눠 둔 이유가 이 흐름입니다.</b> 손님이 자리를 잡는 동안 차가 멋대로
+    출발하면 안 되니까요. 바로 한 판 더 돌릴 때만 Restart를 쓰세요.
+  </div>
+
+  <h3>플레이어 조작 잠금</h3>
+  <p>
+    출발 신호 전에는 사람이 운전할 수 없습니다. 폰의 입력을 떼고, 차량이 입력 인터페이스를
+    구현했다면 브레이크까지 걸어 둡니다. 입력만 막으면 경사진 그리드에서 차가 굴러가기 때문입니다.
+    출발과 동시에 자동으로 풀립니다.
+  </p>
+  <div class="warn">
+    <b>시작 키를 차량 폰에 바인딩하면 안 됩니다.</b> 잠금이 폰의 입력 컴포넌트를 떼기 때문에
+    눌러도 반응이 없습니다. <b>PlayerController, 레벨 블루프린트, 또는 별도 매니저 액터</b>에
+    바인딩하세요. 출발선이 제공하는 기본 키는 출발선 액터 자신이 받으므로 잠금과 무관합니다.
+  </div>
+  <div class="why">
+    <b>VR 폰이 입력을 다르게 받는다면</b> 이 잠금이 안 통할 수 있습니다. 폰이 아니라
+    PlayerController나 별도 액터에서 입력을 처리하는 구조라면,
+    Director의 <strong>Lock Player Until Start</strong>를 끄고
+    <strong>On Race Started</strong> 이벤트를 받아 직접 제어하세요.
   </div>
 </section>
 
@@ -500,6 +637,29 @@ SetTargetGear(-1 또는 1)     후진 탈출할 때만</pre>
                 너무 크면 비켜설 자리가 없다고 판단해서 못 지나갑니다.</td></tr>
         <tr><td class="name">바퀴 수가 안 세어져요</td>
             <td>선의 <strong>Closed Loop</strong>이 꺼져 있어요. 켜 주세요.</td></tr>
+        <tr><td class="name">출발한 자리에서 멈춰요</td>
+            <td>결승선이 출발 지점과 같은 자리예요. 트랙의 <strong>Finish Line Distance</strong>를
+                원하는 위치로 옮기고, 출발선의 <strong>Pole Distance</strong>는 음수로 두세요
+                (예: <code>-25000</code> = 결승선 250m 뒤에서 출발).</td></tr>
+        <tr><td class="name">레이스가 안 끝나요</td>
+            <td>기본값은 <b>플레이어가 완주하면 종료</b>예요. 손님이 사고로 멈추면 끝나지 않습니다.
+                중앙 매니저에서 제한 시간을 두고 <strong>Abort Race</strong>를 부르거나,
+                <strong>End Race When Player Finishes</strong>를 꺼서 전원 완주로 바꾸세요.</td></tr>
+        <tr><td class="name">Play를 눌러도 아무도 안 움직여요</td>
+            <td>정상입니다. 그리드에서 대기 중이에요. <strong>Enter</strong>를 누르면 출발합니다.
+                바로 출발시키려면 출발선의 <strong>Auto Start</strong>를 켜세요.</td></tr>
+        <tr><td class="name">도색이 안 바뀌어요</td>
+            <td>보이지 않는 메시에 칠하고 있을 수 있어요. 차량은 물리용 스켈레탈 메시를 루트로 두고
+                실제 차체는 별도 스태틱 메시로 붙이는 경우가 많습니다.
+                <strong>Livery Mesh Component Name</strong>을 비우고 한 번 실행하면
+                출력 로그에 후보 메시 목록이 나옵니다. 거기서 골라 적고
+                <strong>Livery Material Slot</strong>도 맞춰 주세요.</td></tr>
+        <tr><td class="name">시작 키를 눌러도 반응이 없어요</td>
+            <td>차량 폰에 바인딩했다면 출발 전 입력 잠금 때문에 막힙니다.
+                PlayerController나 별도 액터에 바인딩하세요.</td></tr>
+        <tr><td class="name">다음 손님을 받으려면?</td>
+            <td>레벨을 다시 열지 말고 <strong>Reset Race</strong>를 부르세요.
+                차를 그리드로 되돌리고 기록을 지웁니다.</td></tr>
       </tbody>
     </table>
   </div>
@@ -514,7 +674,9 @@ SetTargetGear(-1 또는 1)     후진 탈출할 때만</pre>
     <thead><tr><th style="width:30%">이름</th><th style="width:14%">기본값</th><th>설명</th></tr></thead>
     <tbody>
       <tr><td class="name">Track Half Width</td><td class="num">500</td><td>중심선에서 좌우로 허용되는 폭. 추월 오프셋이 이 안으로 제한됩니다</td></tr>
+      <tr><td class="name">Finish Line Distance</td><td class="num">0</td><td><b>결승선 위치.</b> 랩·등수·완주 판정이 모두 이 지점 기준입니다. 0이면 선이 시작하는 자리</td></tr>
       <tr><td class="name">Curvature Sample Step</td><td class="num">200</td><td>굽은 정도를 재는 간격. 촘촘할수록 정확하지만 메모리를 더 씁니다</td></tr>
+      <tr><td class="name">Closed Loop</td><td class="num">켜짐</td><td>스플라인 컴포넌트 설정. 끄면 랩 대신 <b>결승선 통과</b>로 완주를 판정합니다 (편도 코스)</td></tr>
     </tbody>
   </table></div>
 
@@ -524,18 +686,62 @@ SetTargetGear(-1 또는 1)     후진 탈출할 때만</pre>
     <tbody>
       <tr><td class="name">Vehicle Class</td><td class="num">&mdash;</td><td>스폰할 자동차 블루프린트. Pawn이어야 합니다</td></tr>
       <tr><td class="name">Vehicle Input Adapter Class</td><td class="num">&mdash;</td><td>Chaos면 <code>ChaosVehicleInputAdapter</code></td></tr>
-      <tr><td class="name">Grid Slots</td><td class="num">비어 있음</td><td>칸 개수 = AI 대수. 칸마다 Profile / Driver Name / Lane Offset / Vehicle Class Override</td></tr>
-      <tr><td class="name">Pole Distance</td><td class="num">0</td><td>선 시작점부터 잰 폴 포지션 위치</td></tr>
+      <tr><td class="name">Grid Slots</td><td class="num">비어 있음</td><td>배열 순서 = 그리드 순서. 칸마다 Occupant(AI/Player) / Profile / Driver Name / Lane Offset / Livery Name / Vehicle Class Override</td></tr>
+      <tr><td class="name">Pole Distance</td><td class="num">0</td><td><b>결승선 기준</b> 폴 포지션 위치. 음수면 결승선 뒤에서 출발합니다</td></tr>
+      <tr><td class="name">Total Laps</td><td class="num">2</td><td>몇 바퀴 돌면 완주인지. 0이면 완주 판정을 하지 않습니다</td></tr>
       <tr><td class="name">Row Spacing</td><td class="num">900</td><td>앞뒤 그리드 간격</td></tr>
       <tr><td class="name">Spawn Height</td><td class="num">80</td><td>스폰할 때 지면 위로 띄울 높이</td></tr>
-      <tr><td class="name">Auto Start</td><td class="num">켜짐</td><td>끄면 <code>Start Race</code>를 직접 호출해야 합니다</td></tr>
+      <tr><td class="name">Auto Start</td><td class="num">꺼짐</td><td>켜면 Play 직후 바로 카운트다운. 기본은 대기이며 Enter로 출발합니다</td></tr>
       <tr><td class="name">Countdown Seconds</td><td class="num">3</td><td>출발까지 기다리는 시간</td></tr>
+      <tr><td class="name">Race Time Limit Seconds</td><td class="num">0</td><td><b>제한 시간.</b> 0이면 무제한. 넘기면 미완주자에게 진행도 순으로 등수를 주고 종료합니다</td></tr>
+      <tr><td class="name">Enable Control Keys</td><td class="num">켜짐</td><td>아래 키 바인딩을 사용합니다</td></tr>
+      <tr><td class="name">Start Race Key</td><td class="num">Enter</td><td>대기 중일 때 카운트다운 시작</td></tr>
+      <tr><td class="name">Reset Race Key</td><td class="num">Delete</td><td>그리드 복귀 후 대기</td></tr>
+      <tr><td class="name">Restart Race Key</td><td class="num">Backspace</td><td>그리드 복귀 + 카운트다운</td></tr>
       <tr><td class="name">Auto Tag Player Pawn</td><td class="num">켜짐</td><td>사람이 타는 차를 자동으로 참가자로 등록</td></tr>
       <tr><td class="name">Draw Debug</td><td class="num">꺼짐</td><td>레이싱 라인과 AI 상태를 화면에 표시</td></tr>
       <tr><td class="name">Rubber Banding</td><td class="num">켜짐</td><td>사람을 기다려 주는 기능 전체 on/off</td></tr>
       <tr><td class="name">Max AI Updates Per Frame</td><td class="num">1</td><td>한 프레임에 갱신할 AI 수. 대수가 많아도 프레임 비용이 균일합니다</td></tr>
+      <tr><td class="name">End Race When Player Finishes</td><td class="num">켜짐</td><td>끄면 전원이 완주해야 레이스가 끝납니다</td></tr>
     </tbody>
   </table></div>
+
+  <h3>Race Grid Spawner &mdash; 도색과 무작위</h3>
+  <div class="tablewrap"><table>
+    <thead><tr><th style="width:30%">이름</th><th style="width:14%">기본값</th><th>설명</th></tr></thead>
+    <tbody>
+      <tr><td class="name">Livery Set</td><td class="num">비어 있음</td><td>사용할 도색 모음(Racing Livery Set). 비우면 도색을 건드리지 않습니다</td></tr>
+      <tr><td class="name">Randomize Liveries</td><td class="num">켜짐</td><td>칸에 도색 이름이 비어 있으면 무작위로 배정</td></tr>
+      <tr><td class="name">Avoid Duplicate Liveries</td><td class="num">켜짐</td><td>같은 레이스에 같은 색이 겹치지 않게 합니다</td></tr>
+      <tr><td class="name">Livery Mesh Component Name</td><td class="num">비어 있음</td><td>도색을 바를 메시 이름. 비우면 루트 메시. 차량이 인터페이스를 구현했다면 무시됩니다</td></tr>
+      <tr><td class="name">Livery Material Slot</td><td class="num">0</td><td>도색을 바를 머티리얼 슬롯 번호. <b>차량마다 다릅니다</b></td></tr>
+      <tr><td class="name">Random Seed</td><td class="num">0</td><td>0이면 매번 다른 결과, 그 외에는 항상 같은 결과</td></tr>
+      <tr><td class="name">Shuffle Grid Order</td><td class="num">꺼짐</td><td>칸을 그리드 자리에 무작위 배치. 칸 구성 자체는 그대로</td></tr>
+      <tr><td class="name">Randomize Profiles</td><td class="num">꺼짐</td><td>난이도를 Profile Pool에서 무작위로 뽑습니다. <b>행사에서는 꺼 두길 권합니다</b></td></tr>
+      <tr><td class="name">Profile Pool</td><td class="num">비어 있음</td><td>위 옵션을 켰을 때 뽑을 후보들</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>Racing Livery Set &mdash; 도색 모음 (데이터 에셋)</h3>
+  <p>
+    콘텐츠 브라우저에서 <strong>우클릭 → Miscellaneous → Data Asset → Racing Livery Set</strong>으로 만듭니다.
+    Liveries 배열에 항목을 추가하고 각각에 이름, 머티리얼, 대표색을 넣으세요.
+  </p>
+  <div class="tablewrap"><table>
+    <thead><tr><th style="width:30%">이름</th><th>설명</th></tr></thead>
+    <tbody>
+      <tr><td class="name">Name</td><td>코드와 그리드 칸에서 부르는 이름 (예: <code>RacingRed</code>)</td></tr>
+      <tr><td class="name">Display Name</td><td>화면에 보여 줄 이름</td></tr>
+      <tr><td class="name">Material</td><td>차체에 바를 머티리얼</td></tr>
+      <tr><td class="name">Tint Color</td><td>이 차를 대표하는 색. 미니맵 아이콘이나 순위표 색점처럼 머티리얼을 못 읽는 곳에서 씁니다</td></tr>
+    </tbody>
+  </table></div>
+  <div class="why">
+    <b>차량이 직접 바르고 싶다면</b> <code>IRacingVehicleLivery</code> 인터페이스를 구현하고
+    <strong>Apply Livery</strong> 이벤트를 채우세요. 그러면 위의 메시·슬롯 설정은 무시되고
+    차량 쪽 구현이 우선합니다. 차체가 여러 메시로 나뉘어 있거나 데칼, 번호판까지
+    같이 바꿔야 할 때 이 방법을 쓰세요.
+  </div>
 
   <h3>Racing AI Profile &mdash; 난이도 (핸들)</h3>
   <div class="tablewrap"><table>
@@ -597,7 +803,9 @@ SetTargetGear(-1 또는 1)     후진 탈출할 때만</pre>
     <tbody>
       <tr><td class="name">Stuck Speed Threshold</td><td class="num">60</td><td>이 속도 미만이면 갇힘 판정 타이머가 돕니다</td></tr>
       <tr><td class="name">Stuck Time to Reverse</td><td class="num">1.5</td><td>갇힘으로 판정하기까지의 시간</td></tr>
+      <tr><td class="name">Launch Grace Seconds</td><td class="num">3.0</td><td>출발 직후 갇힘 판정을 미루는 시간. 없으면 출발 신호마다 모든 AI가 잠깐 뒤로 움찔합니다</td></tr>
       <tr><td class="name">Reverse Duration</td><td class="num">1.2</td><td>후진을 유지하는 시간</td></tr>
+      <tr><td class="name">Max Stuck Attempts</td><td class="num">2</td><td>후진 탈출을 이만큼 시도해도 못 빠져나오면 트랙 위로 재배치합니다</td></tr>
       <tr><td class="name">Flipped Angle Degrees</td><td class="num">70</td><td>뒤집힘으로 판정할 기울기</td></tr>
       <tr><td class="name">Flipped Time to Respawn</td><td class="num">2.5</td><td>뒤집힌 채 이 시간이 지나면 트랙 위로 되돌립니다</td></tr>
       <tr><td class="name">Off Track Respawn Distance</td><td class="num">4000</td><td>트랙에서 이만큼 벗어나면 되돌립니다. 0이면 끔</td></tr>
@@ -609,6 +817,7 @@ SetTargetGear(-1 또는 1)     후진 탈출할 때만</pre>
     <thead><tr><th style="width:30%">이름</th><th style="width:14%">기본값</th><th>설명</th></tr></thead>
     <tbody>
       <tr><td class="name">Is Player</td><td class="num">꺼짐</td><td>사람이 타는 차면 켜세요. 기다려 주기의 기준이 됩니다</td></tr>
+      <tr><td class="name">Did Not Finish</td><td class="num">읽기 전용</td><td>제한 시간 안에 완주하지 못했는지. 결과 화면에서 완주자와 구분하세요</td></tr>
       <tr><td class="name">Display Name</td><td class="num">비어 있음</td><td>순위표에 표시할 이름</td></tr>
     </tbody>
   </table></div>

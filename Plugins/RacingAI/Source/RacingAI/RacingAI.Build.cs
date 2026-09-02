@@ -17,7 +17,8 @@ public class RacingAI : ModuleRules
 		{
 			"Core",
 			"CoreUObject",
-			"Engine"
+			"Engine",
+			"InputCore"
 		});
 
 		PrivateDependencyModuleNames.AddRange(new string[]

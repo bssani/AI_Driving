@@ -8,7 +8,7 @@
 class ARacingSpline;
 
 /**
- * 레이스 참가자 표식입니다. 플레이어 차량과 AI 차량 모두에 붙입니다.
+ * 레이스 참가자 표식입니다. 플레이어 차량과 AI 차량 모두에 붙습니다.
  *
  * 이 컴포넌트가 있는 액터는 Director에 자동 등록되고, Director가 매 프레임 트랙
  * 진행도를 갱신합니다. 그래서 랩 수와 순위는 별도 시스템 없이 여기서 바로 얻어집니다.
@@ -37,25 +37,86 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Racing AI")
 	FText DisplayName;
 
+	/** 이 차량에 적용된 도색 이름입니다. UI에서 같은 색으로 표시할 때 씁니다 */
+	UPROPERTY(BlueprintReadOnly, Category = "Racing AI")
+	FName LiveryName;
+
+	/** 이 차량을 대표하는 색입니다 */
+	UPROPERTY(BlueprintReadOnly, Category = "Racing AI")
+	FLinearColor LiveryColor = FLinearColor::White;
+
 	/** 현재 트랙 진행 상태입니다. Director가 갱신합니다 */
 	UPROPERTY(BlueprintReadOnly, Category = "Racing AI")
 	FRaceProgress Progress;
 
+	//--------------------------------------------------------------------------
+	// 완주
+	//--------------------------------------------------------------------------
+
 	/** 완주 여부입니다 */
-	UPROPERTY(BlueprintReadOnly, Category = "Racing AI")
+	UPROPERTY(BlueprintReadOnly, Category = "Racing AI|Finish")
 	bool bFinished = false;
 
+	/** 완주 순서입니다. 1부터 시작하며 미완주는 0 */
+	UPROPERTY(BlueprintReadOnly, Category = "Racing AI|Finish")
+	int32 FinishPosition = 0;
+
+	/** 출발부터 완주까지 걸린 시간 (초). 미완주는 0 */
+	UPROPERTY(BlueprintReadOnly, Category = "Racing AI|Finish")
+	float FinishTimeSeconds = 0.f;
+
 	/**
-	 * 트랙 진행도를 갱신합니다. Director가 매 프레임 호출합니다.
+	 * 완주하지 못한 채 레이스가 끝났는지 여부입니다.
+	 *
+	 * 제한 시간이 지나 종료되면 남은 참가자는 진행도 순으로 등수만 받고
+	 * 이 값이 켜집니다. 결과 화면에서 완주자와 구분해 표시하세요.
+	 */
+	UPROPERTY(BlueprintReadOnly, Category = "Racing AI|Finish")
+	bool bDidNotFinish = false;
+
+	/** 미완주로 표시합니다. Director가 호출합니다 */
+	void MarkDidNotFinish(int32 InFinishPosition);
+
+	//--------------------------------------------------------------------------
+	// Director가 호출합니다
+	//--------------------------------------------------------------------------
+
+	/**
+	 * 트랙 진행도를 갱신하고 이번 프레임의 랩 변화량을 반환합니다.
 	 *
 	 * 랩 증가는 스플라인 거리가 한 바퀴 가까이 되감겼는지로 판정합니다.
 	 * 정지선 트리거 액터가 따로 필요하지 않습니다.
 	 */
-	void RefreshProgress(const ARacingSpline& Track, float DeltaTime);
+	int32 RefreshProgress(const ARacingSpline& Track, float DeltaTime);
 
-	/** 진행도를 현재 위치 기준으로 초기화합니다. 그리드 배치 후 호출하세요 */
+	/**
+	 * 진행도를 초기화합니다. 그리드 배치 직후에 호출합니다.
+	 *
+	 * InitialLap은 보통 0이지만, 시작선 뒤쪽에 정렬된 차량은 -1을 받습니다.
+	 * 그래야 시작선을 넘는 순간 0랩이 되어 그리드 순서와 순위가 일치합니다.
+	 * 이 값을 넣지 않으면 뒷줄 차량의 누적 거리가 한 바퀴만큼 부풀어
+	 * 출발하자마자 1위로 표시되고 러버밴딩도 반대로 걸립니다.
+	 */
 	UFUNCTION(BlueprintCallable, Category = "Racing AI")
-	void ResetProgress();
+	void ResetProgress(int32 InitialLap = 0);
+
+	/** 완주로 표시합니다. Director가 호출합니다 */
+	void MarkFinished(int32 InFinishPosition, float InFinishTimeSeconds);
+
+	/**
+	 * 사람의 조작을 잠그거나 풉니다.
+	 *
+	 * 출발 신호 전에 플레이어가 먼저 튀어나가지 못하게 합니다. 입력 컴포넌트를 떼고,
+	 * 차량이 입력 인터페이스를 구현했다면 브레이크까지 걸어 둡니다. 경사진 그리드에서
+	 * 입력만 막으면 차가 굴러 내려가기 때문입니다.
+	 *
+	 * AI에는 호출하지 않습니다. AI는 대기 상태가 따로 있습니다.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Racing AI")
+	void SetInputLocked(bool bLocked);
+
+	UFUNCTION(BlueprintPure, Category = "Racing AI")
+	bool IsInputLocked() const { return bInputLocked; }
 
 protected:
 	virtual void BeginPlay() override;
@@ -66,4 +127,7 @@ protected:
 
 	/** 최초 갱신에서는 랩 판정을 건너뜁니다 */
 	bool bHasPreviousDistance = false;
+
+	/** 사람 조작이 잠겨 있는지 */
+	bool bInputLocked = false;
 };

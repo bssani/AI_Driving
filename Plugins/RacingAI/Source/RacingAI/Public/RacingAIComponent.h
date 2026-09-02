@@ -82,9 +82,18 @@ public:
 	UPROPERTY(BlueprintReadOnly, Category = "Racing AI|Director")
 	float TargetLaneOffset = 0.f;
 
-	/** 앞선 차량 정보 */
+	/** 앞선 차량 정보. 차선을 가리지 않은 가장 가까운 차량이며 추월 판단에 씁니다 */
 	UPROPERTY(BlueprintReadOnly, Category = "Racing AI|Director")
 	FRacerAhead RacerAhead;
+
+	/**
+	 * 같은 차선에서 내 진로를 막고 있는 차량입니다. 제동 계산에 씁니다.
+	 *
+	 * RacerAhead와 따로 두는 이유는, 옆 차선의 더 가까운 차 한 대가 그 뒤 같은
+	 * 차선의 실제 충돌 대상을 가려 버리기 때문입니다.
+	 */
+	UPROPERTY(BlueprintReadOnly, Category = "Racing AI|Director")
+	FRacerAhead BlockingRacer;
 
 	/**
 	 * Director가 추월을 지시했는지 여부입니다.
@@ -125,6 +134,23 @@ public:
 	/** 주행을 시작합니다 */
 	void BeginRacing();
 
+	/**
+	 * 완주 상태로 전환합니다.
+	 *
+	 * 레이싱 라인은 계속 따라가되 스로틀을 놓고 서서히 멈춥니다. 결승선 직후
+	 * 그 자리에 급정거하면 뒤따라오는 차와 부딪히기 때문입니다.
+	 */
+	void EnterFinished();
+
+	/**
+	 * 다음 레이스를 위해 내부 상태를 전부 초기화합니다.
+	 *
+	 * 그리드 위치로 되돌린 뒤 Director가 호출합니다. 조향 적분값, 복구 타이머,
+	 * 앞차 정보처럼 프레임을 넘어 이어지는 값이 남아 있으면 다음 회차의 첫 순간에
+	 * 엉뚱한 조향이 나옵니다.
+	 */
+	void ResetForNewRace(float InLaneOffset);
+
 	/** 유효한 프로필을 반환합니다. Profile이 비어 있으면 기본 인스턴스를 만듭니다 */
 	const URacingAIProfile& GetEffectiveProfile() const;
 
@@ -163,4 +189,7 @@ private:
 
 	/** 후진 중 조향 방향. 매번 바꿔가며 빠져나오도록 합니다 */
 	float ReverseSteerSign = 1.f;
+
+	/** 연속 후진 시도 횟수. 한도를 넘기면 재배치로 승격합니다 */
+	int32 StuckAttempts = 0;
 };

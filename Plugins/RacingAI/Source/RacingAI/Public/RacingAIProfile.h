@@ -211,9 +211,29 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Recovery", meta = (ClampMin = "0.2", Units = "s"))
 	float StuckTimeToReverse = 1.5f;
 
+	/**
+	 * 출발 직후 스턱 판정을 유예하는 시간 (초).
+	 *
+	 * 정지 상태에서 가속하는 동안에는 속도가 StuckSpeedThreshold를 넘기까지
+	 * 시간이 걸립니다. 이 유예가 없으면 출발 신호마다 모든 AI가 갇힌 것으로
+	 * 오인되어 잠깐 후진합니다. 무거운 차일수록 넉넉히 주세요.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Recovery", meta = (ClampMin = "0.0", Units = "s"))
+	float LaunchGraceSeconds = 3.f;
+
 	/** 후진을 유지하는 시간 (초) */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Recovery", meta = (ClampMin = "0.2", Units = "s"))
 	float ReverseDuration = 1.2f;
+
+	/**
+	 * 후진 탈출을 몇 번까지 시도할지입니다.
+	 *
+	 * 벽이나 다른 차에 정면으로 막히면 후진했다가 다시 같은 곳으로 돌진하기를
+	 * 반복하며 영영 못 빠져나옵니다. 이 횟수를 넘기면 트랙 위로 재배치해
+	 * 무한 반복을 끊습니다.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Recovery", meta = (ClampMin = "1"))
+	int32 MaxStuckAttempts = 2;
 
 	/** 전복으로 판정할 롤/피치 각도 (도) */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Recovery", meta = (ClampMin = "20.0", ClampMax = "180.0"))

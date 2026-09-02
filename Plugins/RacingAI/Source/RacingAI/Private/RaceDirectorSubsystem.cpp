@@ -1,6 +1,7 @@
 #include "RaceDirectorSubsystem.h"
 
 #include "DrawDebugHelpers.h"
+#include "Engine/World.h"
 #include "EngineUtils.h"
 #include "GameFramework/Actor.h"
 #include "RaceParticipantComponent.h"
@@ -8,6 +9,22 @@
 #include "RacingAIModule.h"
 #include "RacingAIProfile.h"
 #include "RacingSpline.h"
+#include "TimerManager.h"
+
+namespace
+{
+	/** 액터를 물리 상태까지 정리해 옮깁니다 */
+	void TeleportAndSettle(AActor& Actor, const FTransform& Transform)
+	{
+		Actor.SetActorTransform(Transform, false, nullptr, ETeleportType::TeleportPhysics);
+
+		if (UPrimitiveComponent* Root = Cast<UPrimitiveComponent>(Actor.GetRootComponent()))
+		{
+			Root->SetPhysicsLinearVelocity(FVector::ZeroVector);
+			Root->SetPhysicsAngularVelocityInDegrees(FVector::ZeroVector);
+		}
+	}
+}
 
 URaceDirectorSubsystem* URaceDirectorSubsystem::Get(const UObject* WorldContext)
 {
@@ -31,8 +48,18 @@ bool URaceDirectorSubsystem::DoesSupportWorldType(const EWorldType::Type WorldTy
 	return WorldType == EWorldType::Game || WorldType == EWorldType::PIE;
 }
 
+void URaceDirectorSubsystem::Deinitialize()
+{
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(CountdownTimer);
+	}
+
+	Super::Deinitialize();
+}
+
 //------------------------------------------------------------------------------
-// 등록
+// 참가자
 //------------------------------------------------------------------------------
 
 void URaceDirectorSubsystem::RegisterParticipant(URaceParticipantComponent* Participant)
@@ -48,8 +75,7 @@ void URaceDirectorSubsystem::RegisterParticipant(URaceParticipantComponent* Part
 	{
 		AIComponents.Add(AI);
 
-		// 레이스가 아직 시작되지 않았다면 그리드에서 대기시킵니다.
-		if (bRaceStarted)
+		if (RaceState == ERaceState::Racing)
 		{
 			AI->BeginRacing();
 		}
@@ -57,6 +83,12 @@ void URaceDirectorSubsystem::RegisterParticipant(URaceParticipantComponent* Part
 		{
 			AI->EnterWaiting();
 		}
+	}
+	else if (bLockPlayerUntilStart)
+	{
+		// 플레이어 폰은 게임모드가 늦게 만들기도 합니다. 등록 시점에 아직 출발 전이면
+		// 그때 잠가야 카운트다운 도중에 등록된 차가 그냥 달려 나가지 않습니다.
+		Participant->SetInputLocked(RaceState != ERaceState::Racing);
 	}
 
 	UE_LOG(LogRacingAI, Verbose, TEXT("참가자 등록: %s (AI=%s)"),
@@ -73,14 +105,12 @@ void URaceDirectorSubsystem::UnregisterParticipant(URaceParticipantComponent* Pa
 		AIComponents.Remove(AI);
 	}
 
-	if (AIComponents.Num() > 0)
+	GridPlacements.RemoveAll([Participant](const FRaceGridPlacement& Placement)
 	{
-		AdvanceCursor %= AIComponents.Num();
-	}
-	else
-	{
-		AdvanceCursor = 0;
-	}
+		return Placement.Participant.Get() == Participant;
+	});
+
+	AdvanceCursor = AIComponents.Num() > 0 ? AdvanceCursor % AIComponents.Num() : 0;
 }
 
 TArray<URaceParticipantComponent*> URaceDirectorSubsystem::GetParticipantsByPosition() const
@@ -98,6 +128,18 @@ TArray<URaceParticipantComponent*> URaceDirectorSubsystem::GetParticipantsByPosi
 
 	Result.Sort([](const URaceParticipantComponent& A, const URaceParticipantComponent& B)
 	{
+		// 완주자가 항상 앞에 옵니다. 결승선을 통과해 멈춰 선 차가 아직 달리는 차보다
+		// 뒤로 밀려 보이면 결과 화면이 틀리게 됩니다.
+		if (A.bFinished != B.bFinished)
+		{
+			return A.bFinished;
+		}
+
+		if (A.bFinished && B.bFinished)
+		{
+			return A.FinishPosition < B.FinishPosition;
+		}
+
 		return A.Progress.TotalDistance > B.Progress.TotalDistance;
 	});
 
@@ -118,7 +160,258 @@ URaceParticipantComponent* URaceDirectorSubsystem::GetPlayerParticipant() const
 }
 
 //------------------------------------------------------------------------------
-// 트랙과 진행
+// 그리드
+//------------------------------------------------------------------------------
+
+void URaceDirectorSubsystem::RegisterGridPlacement(URaceParticipantComponent* Participant, const FTransform& Transform, int32 InitialLap, float LaneOffset)
+{
+	if (!Participant)
+	{
+		return;
+	}
+
+	GridPlacements.RemoveAll([Participant](const FRaceGridPlacement& Placement)
+	{
+		return Placement.Participant.Get() == Participant;
+	});
+
+	FRaceGridPlacement Placement;
+	Placement.Participant = Participant;
+	Placement.Transform = Transform;
+	Placement.InitialLap = InitialLap;
+	Placement.LaneOffset = LaneOffset;
+
+	GridPlacements.Add(Placement);
+
+	Participant->ResetProgress(InitialLap);
+}
+
+void URaceDirectorSubsystem::ClearGridPlacements()
+{
+	GridPlacements.Reset();
+}
+
+//------------------------------------------------------------------------------
+// 레이스 수명주기
+//------------------------------------------------------------------------------
+
+void URaceDirectorSubsystem::SetTotalLaps(int32 InTotalLaps)
+{
+	TotalLaps = FMath::Max(0, InTotalLaps);
+}
+
+float URaceDirectorSubsystem::GetRaceElapsedSeconds() const
+{
+	const UWorld* World = GetWorld();
+	if (!World || RaceStartTimeSeconds <= 0.f)
+	{
+		return 0.f;
+	}
+
+	return World->GetTimeSeconds() - RaceStartTimeSeconds;
+}
+
+void URaceDirectorSubsystem::HoldAtGrid()
+{
+	for (const TObjectPtr<URacingAIComponent>& AI : AIComponents)
+	{
+		if (AI)
+		{
+			AI->EnterWaiting();
+		}
+	}
+
+	// 사람도 함께 붙잡아 둡니다. AI만 잡아 두면 출발 신호 전에 플레이어 혼자
+	// 먼저 나가 버려 카운트다운이 의미가 없어집니다.
+	if (bLockPlayerUntilStart)
+	{
+		for (const TObjectPtr<URaceParticipantComponent>& Participant : Participants)
+		{
+			if (Participant && !Participant->IsA<URacingAIComponent>())
+			{
+				Participant->SetInputLocked(true);
+			}
+		}
+	}
+}
+
+void URaceDirectorSubsystem::StartCountdown(float Seconds)
+{
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		return;
+	}
+
+	HoldAtGrid();
+
+	RaceState = ERaceState::Countdown;
+	CountdownRemaining = FMath::Max(0, FMath::CeilToInt(Seconds));
+
+	OnCountdownStarted.Broadcast();
+	OnCountdownTick.Broadcast(CountdownRemaining);
+
+	if (CountdownRemaining <= 0)
+	{
+		StartRace();
+
+		return;
+	}
+
+	World->GetTimerManager().SetTimer(CountdownTimer, this, &URaceDirectorSubsystem::TickCountdown, 1.f, true);
+}
+
+void URaceDirectorSubsystem::TickCountdown()
+{
+	--CountdownRemaining;
+
+	OnCountdownTick.Broadcast(FMath::Max(0, CountdownRemaining));
+
+	if (CountdownRemaining <= 0)
+	{
+		if (UWorld* World = GetWorld())
+		{
+			World->GetTimerManager().ClearTimer(CountdownTimer);
+		}
+
+		StartRace();
+	}
+}
+
+void URaceDirectorSubsystem::StartRace()
+{
+	UWorld* World = GetWorld();
+	if (World)
+	{
+		World->GetTimerManager().ClearTimer(CountdownTimer);
+		RaceStartTimeSeconds = World->GetTimeSeconds();
+	}
+
+	RaceState = ERaceState::Racing;
+	FinishedCount = 0;
+
+	// 출발과 동시에 사람의 조작을 풉니다.
+	for (const TObjectPtr<URaceParticipantComponent>& Participant : Participants)
+	{
+		if (Participant && !Participant->IsA<URacingAIComponent>())
+		{
+			Participant->SetInputLocked(false);
+		}
+	}
+
+	for (const TObjectPtr<URacingAIComponent>& AI : AIComponents)
+	{
+		if (AI)
+		{
+			AI->BeginRacing();
+		}
+	}
+
+	UE_LOG(LogRacingAI, Log, TEXT("레이스 시작. 참가자 %d명 (AI %d대), 목표 랩 %d"),
+		Participants.Num(), AIComponents.Num(), TotalLaps);
+
+	OnRaceStarted.Broadcast();
+}
+
+void URaceDirectorSubsystem::RestartRace(float CountdownSeconds)
+{
+	ResetRace();
+	StartCountdown(CountdownSeconds);
+}
+
+void URaceDirectorSubsystem::AbortRace()
+{
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(CountdownTimer);
+	}
+
+	RaceState = ERaceState::Aborted;
+	HoldAtGrid();
+
+	UE_LOG(LogRacingAI, Log, TEXT("레이스 중단"));
+}
+
+void URaceDirectorSubsystem::ConcludeRace()
+{
+	if (RaceState == ERaceState::Finished)
+	{
+		return;
+	}
+
+	RaceState = ERaceState::Finished;
+
+	// 완주하지 못한 참가자에게도 진행도 순으로 등수를 줍니다. 결과 화면이
+	// 빈칸으로 남지 않게 하고, 완주자와는 bDidNotFinish로 구분됩니다.
+	int32 NextPosition = FinishedCount;
+
+	for (URaceParticipantComponent* Participant : GetParticipantsByPosition())
+	{
+		if (Participant && !Participant->bFinished)
+		{
+			Participant->MarkDidNotFinish(++NextPosition);
+		}
+	}
+
+	if (bStopAIAfterFinish)
+	{
+		for (const TObjectPtr<URacingAIComponent>& AI : AIComponents)
+		{
+			if (AI)
+			{
+				AI->EnterFinished();
+			}
+		}
+	}
+
+	UE_LOG(LogRacingAI, Log, TEXT("레이스 종료. 완주 %d명"), FinishedCount);
+
+	OnRaceFinished.Broadcast();
+}
+
+void URaceDirectorSubsystem::ResetRace()
+{
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(CountdownTimer);
+	}
+
+	// 기록해 둔 그리드 자리로 되돌립니다. 레벨을 다시 로드하지 않는 것이 요점입니다.
+	for (const FRaceGridPlacement& Placement : GridPlacements)
+	{
+		URaceParticipantComponent* Participant = Placement.Participant.Get();
+		if (!Participant)
+		{
+			continue;
+		}
+
+		if (AActor* Owner = Participant->GetOwner())
+		{
+			TeleportAndSettle(*Owner, Placement.Transform);
+		}
+
+		Participant->ResetProgress(Placement.InitialLap);
+
+		if (URacingAIComponent* AI = Cast<URacingAIComponent>(Participant))
+		{
+			AI->ResetForNewRace(Placement.LaneOffset);
+		}
+	}
+
+	RaceState = ERaceState::Idle;
+	FinishedCount = 0;
+	RaceStartTimeSeconds = 0.f;
+	CountdownRemaining = 0;
+
+	HoldAtGrid();
+
+	UE_LOG(LogRacingAI, Log, TEXT("그리드 리셋. 참가자 %d명"), GridPlacements.Num());
+
+	OnRaceReset.Broadcast();
+}
+
+//------------------------------------------------------------------------------
+// 트랙
 //------------------------------------------------------------------------------
 
 void URaceDirectorSubsystem::SetTrack(ARacingSpline* InTrack)
@@ -160,34 +453,6 @@ void URaceDirectorSubsystem::ResolveTrackIfNeeded()
 	}
 }
 
-void URaceDirectorSubsystem::HoldAtGrid()
-{
-	bRaceStarted = false;
-
-	for (const TObjectPtr<URacingAIComponent>& AI : AIComponents)
-	{
-		if (AI)
-		{
-			AI->EnterWaiting();
-		}
-	}
-}
-
-void URaceDirectorSubsystem::StartRace()
-{
-	bRaceStarted = true;
-
-	for (const TObjectPtr<URacingAIComponent>& AI : AIComponents)
-	{
-		if (AI)
-		{
-			AI->BeginRacing();
-		}
-	}
-
-	UE_LOG(LogRacingAI, Log, TEXT("레이스 시작. 참가자 %d명 (AI %d대)"), Participants.Num(), AIComponents.Num());
-}
-
 //------------------------------------------------------------------------------
 // Tick
 //------------------------------------------------------------------------------
@@ -204,6 +469,16 @@ void URaceDirectorSubsystem::Tick(float DeltaTime)
 	}
 
 	UpdateProgressAndPositions(DeltaTime);
+	CheckForFinishers();
+
+	// 제한 시간. 손님이 사고로 멈추면 완주 조건이 영영 충족되지 않으므로,
+	// 이 검사가 없으면 세션이 끝나지 않습니다.
+	if (RaceState == ERaceState::Racing && RaceTimeLimitSeconds > 0.f
+		&& GetRaceElapsedSeconds() >= RaceTimeLimitSeconds)
+	{
+		UE_LOG(LogRacingAI, Log, TEXT("제한 시간 %.0f초 경과로 레이스를 종료합니다."), RaceTimeLimitSeconds);
+		ConcludeRace();
+	}
 	UpdateRubberBanding();
 	ArbitrateOvertaking();
 	AdvanceAI(DeltaTime);
@@ -219,9 +494,17 @@ void URaceDirectorSubsystem::UpdateProgressAndPositions(float DeltaTime)
 	// 진행도 갱신은 전원 매 프레임입니다. 값이 싸고, 추월 판단이 항상 최신이어야 합니다.
 	for (const TObjectPtr<URaceParticipantComponent>& Participant : Participants)
 	{
-		if (Participant)
+		if (!Participant)
 		{
-			Participant->RefreshProgress(*Track, DeltaTime);
+			continue;
+		}
+
+		const int32 LapDelta = Participant->RefreshProgress(*Track, DeltaTime);
+
+		// 랩이 늘어난 순간에만 알립니다. 역주행으로 되돌아간 경우는 알리지 않습니다.
+		if (LapDelta > 0 && RaceState == ERaceState::Racing)
+		{
+			OnLapCompleted.Broadcast(Participant, Participant->Progress.Lap);
 		}
 	}
 
@@ -230,6 +513,64 @@ void URaceDirectorSubsystem::UpdateProgressAndPositions(float DeltaTime)
 	for (int32 Index = 0; Index < Ordered.Num(); ++Index)
 	{
 		Ordered[Index]->Progress.Position = Index + 1;
+	}
+}
+
+void URaceDirectorSubsystem::CheckForFinishers()
+{
+	if (RaceState != ERaceState::Racing || TotalLaps <= 0)
+	{
+		return;
+	}
+
+	bool bPlayerFinished = false;
+	const bool bClosedCircuit = Track && Track->IsClosed();
+
+	for (const TObjectPtr<URaceParticipantComponent>& Participant : Participants)
+	{
+		if (!Participant || Participant->bFinished)
+		{
+			continue;
+		}
+
+		// 닫힌 서킷은 정해진 랩을 채우면 완주입니다. 열린 코스(스프린트)는 랩이라는
+		// 개념이 없으므로 결승선을 통과했는지만 봅니다.
+		const bool bReachedFinish = bClosedCircuit
+			? Participant->Progress.Lap >= TotalLaps
+			: Participant->Progress.LapDistance >= 0.f;
+
+		if (!bReachedFinish)
+		{
+			continue;
+		}
+
+		++FinishedCount;
+		Participant->MarkFinished(FinishedCount, GetRaceElapsedSeconds());
+
+		if (bStopAIAfterFinish)
+		{
+			if (URacingAIComponent* AI = Cast<URacingAIComponent>(Participant))
+			{
+				AI->EnterFinished();
+			}
+		}
+
+		UE_LOG(LogRacingAI, Log, TEXT("완주: %s (%d위, %.2f초)"),
+			*Participant->DisplayName.ToString(), FinishedCount, Participant->FinishTimeSeconds);
+
+		OnRacerFinished.Broadcast(Participant, FinishedCount);
+
+		if (Participant->bIsPlayer)
+		{
+			bPlayerFinished = true;
+		}
+	}
+
+	const bool bAllFinished = FinishedCount >= Participants.Num();
+
+	if (bAllFinished || (bPlayerFinished && bEndRaceWhenPlayerFinishes))
+	{
+		ConcludeRace();
 	}
 }
 
@@ -272,7 +613,7 @@ void URaceDirectorSubsystem::UpdateRubberBanding()
 	}
 }
 
-FRacerAhead URaceDirectorSubsystem::FindRacerAhead(const URaceParticipantComponent* Self, float ScanDistance) const
+FRacerAhead URaceDirectorSubsystem::FindRacerAhead(const URaceParticipantComponent* Self, float ScanDistance, float MaxLateralSeparation) const
 {
 	FRacerAhead Result;
 
@@ -298,6 +639,16 @@ FRacerAhead URaceDirectorSubsystem::FindRacerAhead(const URaceParticipantCompone
 		if (Gap < MinMeaningfulGap || Gap > ScanDistance || Gap >= BestGap)
 		{
 			continue;
+		}
+
+		if (MaxLateralSeparation >= 0.f)
+		{
+			const float Separation = FMath::Abs(Other->Progress.LateralOffset - Self->Progress.LateralOffset);
+
+			if (Separation >= MaxLateralSeparation)
+			{
+				continue;
+			}
 		}
 
 		BestGap = Gap;
@@ -338,6 +689,15 @@ void URaceDirectorSubsystem::ArbitrateOvertaking()
 
 		const FRacerAhead Ahead = FindRacerAhead(AI, P.OvertakeScanDistance);
 		AI->RacerAhead = Ahead;
+
+		// 제동용 탐색 거리는 속도에 따라 늘어나야 합니다. 고정 30m로는 시속 100km에서
+		// 정지 거리(수십~100m 이상)를 감당할 수 없어, 앞차를 본 순간 이미 늦습니다.
+		// 트랙 곡률을 볼 때 쓰는 것과 같은 방식입니다.
+		const float Speed = FMath::Max(0.f, AI->Progress.ForwardSpeed);
+		const float StoppingDistance = (Speed * Speed) / (2.f * FMath::Max(1.f, P.BrakingDecel));
+		const float BrakeScan = FMath::Max(P.OvertakeScanDistance, StoppingDistance * 1.3f + P.FollowGap);
+
+		AI->BlockingRacer = FindRacerAhead(AI, BrakeScan, P.PassingLateralClearance);
 
 		float Desired = AI->BaseLaneOffset;
 		bool bPass = false;
@@ -445,7 +805,6 @@ void URaceDirectorSubsystem::DrawDebug() const
 		return;
 	}
 
-	// 레이싱 라인
 	const float Length = Track->GetLength();
 	const float Step = 400.f;
 
@@ -453,6 +812,41 @@ void URaceDirectorSubsystem::DrawDebug() const
 	{
 		DrawDebugLine(World, Track->GetLocationAtDistance(D), Track->GetLocationAtDistance(D + Step),
 			FColor(60, 160, 160), false, -1.f, 0, 6.f);
+	}
+
+	// 현재 레이스 상태를 화면 위에 띄웁니다. 대기 중인지 달리는 중인지 모르면
+	// "왜 안 움직이지"로 헤매게 됩니다.
+	if (GEngine)
+	{
+		FString Status;
+
+		switch (RaceState)
+		{
+		case ERaceState::Idle:      Status = TEXT("대기 중"); break;
+		case ERaceState::Countdown: Status = FString::Printf(TEXT("카운트다운 %d"), CountdownRemaining); break;
+		case ERaceState::Racing:    Status = FString::Printf(TEXT("주행 중  %.0f초  랩 %d"), GetRaceElapsedSeconds(), TotalLaps); break;
+		case ERaceState::Finished:  Status = TEXT("종료"); break;
+		case ERaceState::Aborted:   Status = TEXT("중단됨"); break;
+		}
+
+		// 달리는 중에는 조작 안내가 방해되므로 대기·종료 상태에서만 붙입니다.
+		const bool bShowHint = !ControlHint.IsEmpty()
+			&& (RaceState == ERaceState::Idle || RaceState == ERaceState::Finished || RaceState == ERaceState::Aborted);
+
+		GEngine->AddOnScreenDebugMessage(0x5AC1, 0.f, FColor::Yellow,
+			bShowHint
+				? FString::Printf(TEXT("[Racing AI] %s    %s"), *Status, *ControlHint)
+				: FString::Printf(TEXT("[Racing AI] %s"), *Status));
+	}
+
+	// 결승선. 어디서 랩이 올라가고 어디서 멈추는지 눈으로 확인할 수 있어야 합니다.
+	{
+		const float FinishDistance = Track->FinishLineDistance;
+		const FVector Center = Track->GetLocationAtDistance(FinishDistance) + FVector(0.f, 0.f, 20.f);
+		const FVector Right = Track->GetRightAtDistance(FinishDistance) * Track->TrackHalfWidth;
+
+		DrawDebugLine(World, Center - Right, Center + Right, FColor::White, false, -1.f, 0, 18.f);
+		DrawDebugString(World, Center + FVector(0.f, 0.f, 260.f), TEXT("FINISH"), nullptr, FColor::White, 0.f, true, 1.6f);
 	}
 
 	for (const TObjectPtr<URacingAIComponent>& AI : AIComponents)
@@ -464,7 +858,6 @@ void URaceDirectorSubsystem::DrawDebug() const
 
 		const FVector Origin = AI->GetOwner()->GetActorLocation();
 
-		// 배정된 차선 목표
 		const FVector LaneTarget = Track->GetOffsetLocationAtDistance(
 			AI->Progress.DistanceAlongSpline + 800.f, AI->TargetLaneOffset);
 
@@ -472,12 +865,13 @@ void URaceDirectorSubsystem::DrawDebug() const
 		DrawDebugSphere(World, LaneTarget, 40.f, 8, FColor::Yellow, false, -1.f, 0, 2.f);
 
 		const FString Text = FString::Printf(
-			TEXT("P%d  %.0f/%.0f km/h  scale %.2f  lane %.0f  %s"),
+			TEXT("P%d L%d/%d  %.0f/%.0f km/h  scale %.2f  %s"),
 			AI->Progress.Position,
+			FMath::Max(0, AI->Progress.Lap),
+			TotalLaps,
 			AI->Progress.ForwardSpeed * 0.036f,
 			AI->TargetSpeed * 0.036f,
 			AI->SpeedScale,
-			AI->TargetLaneOffset,
 			*UEnum::GetDisplayValueAsText(AI->State).ToString());
 
 		DrawDebugString(World, FVector(0.f, 0.f, 220.f), Text, AI->GetOwner(), FColor::White, 0.f, true, 1.2f);

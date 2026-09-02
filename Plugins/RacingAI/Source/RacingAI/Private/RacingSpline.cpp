@@ -148,6 +148,32 @@ float ARacingSpline::GetLateralOffsetAtLocation(const FVector& WorldLocation) co
 }
 
 //------------------------------------------------------------------------------
+// 결승선
+//------------------------------------------------------------------------------
+
+float ARacingSpline::GetDistanceFromFinishLine(float SplineDistance) const
+{
+	if (!IsClosed())
+	{
+		// 열린 코스는 감싸지 않습니다. 결승선 앞이면 음수가 나오며, 그 부호로
+		// 아직 통과하지 않았음을 알 수 있습니다.
+		return SplineDistance - FinishLineDistance;
+	}
+
+	return WrapDistance(SplineDistance - FinishLineDistance);
+}
+
+float ARacingSpline::GetSplineDistanceFromFinishOffset(float OffsetFromFinish) const
+{
+	return WrapDistance(FinishLineDistance + OffsetFromFinish);
+}
+
+FVector ARacingSpline::GetFinishLineLocation() const
+{
+	return GetLocationAtDistance(FinishLineDistance);
+}
+
+//------------------------------------------------------------------------------
 // 곡률
 //------------------------------------------------------------------------------
 

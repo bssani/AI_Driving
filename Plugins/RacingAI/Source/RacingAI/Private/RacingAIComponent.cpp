@@ -120,8 +120,50 @@ void URacingAIComponent::BeginRacing()
 	if (State == ERacingAIState::Waiting)
 	{
 		State = ERacingAIState::Racing;
-		StuckTimer = 0.f;
+
+		// 스턱 타이머를 음수에서 시작해 출발 가속 구간을 유예합니다. 이게 없으면
+		// 정지 상태의 속도가 판정 문턱을 넘기 전에 타이머가 먼저 차서, 출발 신호마다
+		// 모든 AI가 갇힌 것으로 오인되어 뒤로 움찔합니다.
+		StuckTimer = -GetEffectiveProfile().LaunchGraceSeconds;
 	}
+}
+
+void URacingAIComponent::EnterFinished()
+{
+	State = ERacingAIState::Finished;
+	StuckTimer = 0.f;
+	ReverseTimer = 0.f;
+
+	if (UObject* Target = VehicleInput.GetObject())
+	{
+		IRacingVehicleInput::Execute_SetReverseGear(Target, false);
+	}
+}
+
+void URacingAIComponent::ResetForNewRace(float InLaneOffset)
+{
+	BaseLaneOffset = InLaneOffset;
+	CurrentLaneOffset = InLaneOffset;
+	TargetLaneOffset = InLaneOffset;
+
+	CurrentSteering = 0.f;
+	CurrentThrottle = 0.f;
+	CurrentBrake = 0.f;
+	TargetSpeed = 0.f;
+	FreeTargetSpeed = 0.f;
+	SpeedScale = 1.f;
+
+	StuckTimer = 0.f;
+	ReverseTimer = 0.f;
+	FlippedTimer = 0.f;
+	StuckAttempts = 0;
+	TimeSinceAdvance = 0.f;
+
+	RacerAhead = FRacerAhead();
+	BlockingRacer = FRacerAhead();
+	bIntendToPass = false;
+
+	EnterWaiting();
 }
 
 //------------------------------------------------------------------------------
@@ -144,6 +186,19 @@ void URacingAIComponent::Advance(const ARacingSpline& Track, float DeltaTime)
 	if (State == ERacingAIState::Waiting)
 	{
 		ApplyInputs(0.f, 0.f, 1.f);
+
+		return;
+	}
+
+	if (State == ERacingAIState::Finished)
+	{
+		// 완주 후에도 레이싱 라인은 계속 따라갑니다. 조향을 놓으면 결승선 직후
+		// 트랙 밖으로 흘러나가 다음 회차의 그리드 리셋 전까지 이상하게 서 있게 됩니다.
+		const float FinishSteering = ComputeSteering(Track, DeltaTime);
+		const float FinishBrake = FMath::Abs(Progress.ForwardSpeed) > 50.f ? 0.4f : 1.f;
+
+		ApplyInputs(FinishSteering, 0.f, FinishBrake);
+		TargetSpeed = 0.f;
 
 		return;
 	}
@@ -239,30 +294,27 @@ void URacingAIComponent::ComputeSpeedControl(const ARacingSpline& Track, float D
 	// 삼아야, 앞차 때문에 멈춘 순간 판정이 뒤집히는 일이 없습니다.
 	FreeTargetSpeed = Target;
 
-	if (RacerAhead.bValid)
+	// 같은 차선에서 진로를 막는 차량에 대한 제동입니다. Director가 속도에 맞춰 넓힌
+	// 범위로 찾아 주므로, 여기서는 "지금 속도로 저 차 속도까지 줄일 수 있는가"만 봅니다.
+	if (BlockingRacer.bValid)
 	{
-		// 좌우로 충분히 벌어져 있으면 같은 차선이 아니므로 간격을 지킬 이유가 없습니다.
-		// 이 판정이 없으면 정지한 앞차 옆에 나란히 서도 목표 속도가 0으로 묶여
-		// 추월을 끝낼 수 없습니다.
-		const float LateralGap = FMath::Abs(RacerAhead.LateralOffset - Progress.LateralOffset);
-		const bool bSameLane = LateralGap < P.PassingLateralClearance;
+		const float Clearance = BlockingRacer.bIsPlayer ? P.FollowGap + P.PlayerExtraClearance : P.FollowGap;
 
-		const float Clearance = RacerAhead.bIsPlayer ? P.FollowGap + P.PlayerExtraClearance : P.FollowGap;
+		// 앞차에 붙기 전까지 쓸 수 있는 여유 거리입니다.
+		const float Room = FMath::Max(0.f, BlockingRacer.Gap - Clearance);
+		const float TheirSpeed = FMath::Max(0.f, BlockingRacer.ForwardSpeed);
 
-		if (bSameLane && RacerAhead.Gap < Clearance)
+		// v = sqrt(u^2 + 2*a*d). 코너 제동 시점을 역산할 때와 같은 식입니다.
+		// 앞차가 서 있으면 u가 0이 되어 여유 거리를 다 쓰고 정확히 멈춥니다.
+		const float SafeSpeed = FMath::Sqrt(TheirSpeed * TheirSpeed + 2.f * P.BrakingDecel * Room);
+
+		Target = FMath::Min(Target, SafeSpeed);
+
+		// 멈춘 차는 조향을 해도 옆으로 가지 못합니다. 추월하려면 굴러가야 하므로
+		// 추돌 하한 바깥에서는 최소 속도를 유지해 비켜설 여지를 만듭니다.
+		if (bIntendToPass && BlockingRacer.Gap > P.HardStopGap)
 		{
-			// 간격이 좁을수록 앞차 속도에 가깝게, 아주 가까우면 그보다 느리게 맞춥니다.
-			const float Ratio = FMath::Clamp(RacerAhead.Gap / FMath::Max(1.f, Clearance), 0.f, 1.f);
-			const float Matched = FMath::Lerp(RacerAhead.ForwardSpeed * 0.85f, RacerAhead.ForwardSpeed, Ratio);
-
-			Target = FMath::Min(Target, FMath::Max(0.f, Matched));
-
-			// 멈춘 차는 조향을 해도 옆으로 가지 못합니다. 추월하려면 굴러가야 하므로
-			// 추돌 하한 바깥에서는 최소 속도를 유지해 비켜설 여지를 만듭니다.
-			if (bIntendToPass && RacerAhead.Gap > P.HardStopGap)
-			{
-				Target = FMath::Max(Target, FMath::Min(P.MinOvertakeSpeed, FreeTargetSpeed));
-			}
+			Target = FMath::Max(Target, FMath::Min(P.MinOvertakeSpeed, FreeTargetSpeed));
 		}
 	}
 
@@ -339,6 +391,19 @@ bool URacingAIComponent::UpdateRecovery(const ARacingSpline& Track, float DeltaT
 
 		if (StuckTimer >= P.StuckTimeToReverse)
 		{
+			// 후진을 되풀이해도 못 빠져나오는 경우가 있습니다. 벽이나 다른 차에
+			// 정면으로 막히면 물러났다가 같은 곳으로 다시 돌진하기를 반복합니다.
+			// 몇 번 시도해 보고 안 되면 트랙 위로 재배치해 고리를 끊습니다.
+			if (++StuckAttempts > FMath::Max(1, P.MaxStuckAttempts))
+			{
+				UE_LOG(LogRacingAI, Log, TEXT("%s: 후진 탈출 %d회 실패, 트랙 위로 재배치합니다."),
+					*GetNameSafe(GetOwner()), StuckAttempts - 1);
+
+				RespawnOnTrack(Track);
+
+				return true;
+			}
+
 			State = ERacingAIState::Reversing;
 			ReverseTimer = P.ReverseDuration;
 
@@ -359,6 +424,7 @@ bool URacingAIComponent::UpdateRecovery(const ARacingSpline& Track, float DeltaT
 	else
 	{
 		StuckTimer = 0.f;
+		StuckAttempts = 0;
 	}
 
 	return false;
@@ -386,9 +452,12 @@ void URacingAIComponent::RespawnOnTrack(const ARacingSpline& Track)
 	}
 
 	FlippedTimer = 0.f;
-	StuckTimer = 0.f;
+	StuckAttempts = 0;
 	CurrentSteering = 0.f;
 	State = ERacingAIState::Racing;
+
+	// 재배치 직후에도 속도가 0이라 곧바로 갇힘으로 오인됩니다. 출발과 같은 유예를 줍니다.
+	StuckTimer = -GetEffectiveProfile().LaunchGraceSeconds;
 
 	if (UObject* Target = VehicleInput.GetObject())
 	{

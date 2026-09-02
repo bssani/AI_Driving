@@ -22,7 +22,10 @@ enum class ERacingAIState : uint8
 	Reversing,
 
 	/** 전복 등으로 스플라인 위에 재배치되는 중 */
-	Respawning
+	Respawning,
+
+	/** 완주 후 감속 중. 레이싱 라인은 계속 따라갑니다 */
+	Finished
 };
 
 /** 추월 시 어느 쪽으로 비킬지입니다. */
@@ -32,6 +35,42 @@ enum class ERacingLaneSide : uint8
 	Center,
 	Left,
 	Right
+};
+
+/**
+ * 레이스 전체의 진행 상태입니다.
+ *
+ * 메인 프로젝트의 중앙 매니저가 이 값과 델리게이트만 보고 결과 화면, 세션 전환,
+ * UI를 처리할 수 있도록 플러그인 바깥으로 노출합니다.
+ */
+UENUM(BlueprintType)
+enum class ERaceState : uint8
+{
+	/** 아직 시작 전. 그리드에 정렬만 되어 있습니다 */
+	Idle,
+
+	/** 카운트다운 진행 중 */
+	Countdown,
+
+	/** 주행 중 */
+	Racing,
+
+	/** 모든 참가자가 완주했거나 레이스가 종료되었습니다 */
+	Finished,
+
+	/** 외부에서 중단되었습니다 */
+	Aborted
+};
+
+/** 그리드 한 자리에 누가 서는지입니다. */
+UENUM(BlueprintType)
+enum class ERaceGridOccupant : uint8
+{
+	/** AI 차량을 스폰합니다 */
+	AI,
+
+	/** 사람이 타는 차량을 이 자리로 옮깁니다 */
+	Player
 };
 
 /**
@@ -45,11 +84,29 @@ struct RACINGAI_API FRaceProgress
 {
 	GENERATED_BODY()
 
-	/** 스플라인 시작점 기준 이번 랩의 진행 거리 (cm) */
+	/**
+	 * 스플라인 시작점 기준 절대 거리 (cm)입니다.
+	 *
+	 * 목표점 계산, 곡률 조회처럼 트랙 위 위치가 필요한 곳에서 씁니다.
+	 */
 	UPROPERTY(BlueprintReadOnly, Category = "Racing AI")
 	float DistanceAlongSpline = 0.f;
 
-	/** 완주한 랩 수 */
+	/**
+	 * 결승선 기준 이번 랩의 진행 거리 (cm)입니다.
+	 *
+	 * 랩 판정과 순위는 이 값으로 합니다. 결승선을 스플라인 원점이 아닌 곳에 두면
+	 * DistanceAlongSpline과 달라집니다.
+	 */
+	UPROPERTY(BlueprintReadOnly, Category = "Racing AI")
+	float LapDistance = 0.f;
+
+	/**
+	 * 완주한 랩 수입니다.
+	 *
+	 * 시작선 뒤에 정렬된 차량은 -1로 시작합니다. 그래야 시작선을 넘는 순간 0랩이 되어
+	 * 그리드 순서와 순위가 일치합니다.
+	 */
 	UPROPERTY(BlueprintReadOnly, Category = "Racing AI")
 	int32 Lap = 0;
 

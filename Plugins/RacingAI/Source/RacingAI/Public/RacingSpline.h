@@ -36,6 +36,18 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Racing Spline", meta = (ClampMin = "50.0"))
 	float TrackHalfWidth = 500.f;
 
+	/**
+	 * 결승선의 스플라인 거리 (cm)입니다.
+	 *
+	 * 랩은 이 지점을 통과할 때 올라가고, 순위도 이 지점을 기준으로 잽니다.
+	 * 0이면 스플라인이 시작하는 자리가 곧 결승선입니다.
+	 *
+	 * 출발 그리드는 스포너의 Pole Distance로 따로 잡습니다. 그 값이 이 결승선을
+	 * 기준으로 한 상대 거리이므로, 둘을 다르게 두면 출발 지점과 결승 지점이 갈라집니다.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Racing Spline", meta = (ClampMin = "0.0"))
+	float FinishLineDistance = 0.f;
+
 	/** 곡률 LUT의 샘플 간격 (cm). 촘촘할수록 정확하지만 메모리를 더 씁니다 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Racing Spline", meta = (ClampMin = "50.0", ClampMax = "1000.0"))
 	float CurvatureSampleStep = 200.f;
@@ -89,6 +101,27 @@ public:
 	/** 월드 위치의 좌우 오프셋을 구합니다. 오른쪽이 양수 (cm) */
 	UFUNCTION(BlueprintPure, Category = "Racing Spline")
 	float GetLateralOffsetAtLocation(const FVector& WorldLocation) const;
+
+	//--------------------------------------------------------------------------
+	// 결승선
+	//--------------------------------------------------------------------------
+
+	/**
+	 * 결승선을 기준으로 다시 잰 거리입니다. 닫힌 서킷에서는 [0, 길이) 범위입니다.
+	 *
+	 * 랩 판정과 순위는 이 값으로 합니다. 스플라인 원점이 아니라 결승선이 기준이어야
+	 * 출발 지점과 결승 지점을 따로 둘 수 있습니다.
+	 */
+	UFUNCTION(BlueprintPure, Category = "Racing Spline")
+	float GetDistanceFromFinishLine(float SplineDistance) const;
+
+	/** 결승선 기준 상대 거리를 절대 스플라인 거리로 되돌립니다 */
+	UFUNCTION(BlueprintPure, Category = "Racing Spline")
+	float GetSplineDistanceFromFinishOffset(float OffsetFromFinish) const;
+
+	/** 결승선의 월드 위치입니다 */
+	UFUNCTION(BlueprintPure, Category = "Racing Spline")
+	FVector GetFinishLineLocation() const;
 
 	//--------------------------------------------------------------------------
 	// 곡률과 속도
