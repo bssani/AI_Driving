@@ -14,6 +14,7 @@ class USkeletalMeshComponent;
 class UAnimationAsset;
 class UVRHandPresenceComponent;
 class UPoseableMeshComponent;
+class UVehicleSoundComponent;
 class UChaosWheeledVehicleMovementComponent;
 struct FInputActionValue;
 
@@ -76,6 +77,10 @@ class AAI_DrivingPawn : public AWheeledVehiclePawn
 	/** Hand drawn from headset tracking while it is off the wheel */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category ="Components", meta = (AllowPrivateAccess = "true"))
 	UPoseableMeshComponent* RightTrackedHand;
+
+	/** Engine, tyre, wind and impact audio. Reads its own state off the Chaos movement component */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category ="Components", meta = (AllowPrivateAccess = "true"))
+	UVehicleSoundComponent* VehicleSound;
 
 	/** Decides which hand representation the driver sees, and turns the wheel */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category ="Components", meta = (AllowPrivateAccess = "true"))

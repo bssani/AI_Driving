@@ -46,6 +46,19 @@ public class AI_Driving : ModuleRules
 
 		PublicDefinitions.Add("WITH_METAXR_HANDS=" + (bHasMetaXR ? "1" : "0"));
 
+		// The sound plugin lives in its own repository and is linked in as a junction, so a fresh
+		// clone of this project won't have it until that is set up. Keep it optional rather than
+		// failing the build: the cost of it missing is silence, not a broken project.
+		bool bHasVehicleSound = Target.ProjectFile != null
+			&& Directory.Exists(Path.Combine(Target.ProjectFile.Directory.FullName, "Plugins", "VehicleSoundSystem"));
+
+		if (bHasVehicleSound)
+		{
+			PrivateDependencyModuleNames.Add("VehicleSoundSystem");
+		}
+
+		PublicDefinitions.Add("WITH_VEHICLE_SOUND=" + (bHasVehicleSound ? "1" : "0"));
+
 		// Uncomment if you are using Slate UI
 		// PrivateDependencyModuleNames.AddRange(new string[] { "Slate", "SlateCore" });
 

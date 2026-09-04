@@ -22,6 +22,10 @@
 #include "VRHandPresenceComponent.h"
 #include "Components/PoseableMeshComponent.h"
 
+#if WITH_VEHICLE_SOUND
+#include "Components/VehicleSoundComponent.h"
+#endif
+
 #if WITH_METAXR_HANDS
 #include "OculusXRHandComponent.h"
 #endif
@@ -155,6 +159,13 @@ AAI_DrivingPawn::AAI_DrivingPawn()
 	LeftTrackedHand->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	RightTrackedHand->SetupAttachment(VROrigin);
 	RightTrackedHand->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+
+	// construct the vehicle audio. It finds the Chaos movement component itself and reads RPM,
+	// speed, gear and wheel slip from it, so there's nothing to wire up here. Assign a sound
+	// preset in the vehicle Blueprint to give it something to play.
+#if WITH_VEHICLE_SOUND
+	VehicleSound = CreateDefaultSubobject<UVehicleSoundComponent>(TEXT("Vehicle Sound"));
+#endif
 
 	// construct the hand swapper and point it at what it drives
 	HandPresence = CreateDefaultSubobject<UVRHandPresenceComponent>(TEXT("VR Hand Presence"));
