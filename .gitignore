@@ -79,3 +79,7 @@ Plugins/UnrealAgent/
 
 # .NET 빌드 중간 산출물
 obj/
+
+# VehicleSoundSystem - 상류는 C:/Git/VehicleSoundSystem 이고 여기는 디렉터리 정션이다.
+# 사본을 커밋하면 상류와 갈라지므로 추적하지 않는다.
+Plugins/VehicleSoundSystem/

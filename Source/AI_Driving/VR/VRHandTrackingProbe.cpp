@@ -10,6 +10,7 @@
 #include "HeadMountedDisplayTypes.h"
 #include "IHandTracker.h"
 #include "IXRTrackingSystem.h"
+#include "VRHandPresenceComponent.h"
 #include "InputCoreTypes.h"
 #include "Kismet/GameplayStatics.h"
 
@@ -39,15 +40,6 @@ namespace
 
 		World->SpawnActor<AVRHandTrackingProbe>();
 		Ar.Log(TEXT("VR hand tracking probe spawned. Put your hands in front of the headset."));
-	}
-
-	/** Returns the registered OpenXR hand tracker, or null if nothing provides the feature */
-	IHandTracker* FindHandTracker()
-	{
-		const TArray<IHandTracker*> Trackers =
-			IModularFeatures::Get().GetModularFeatureImplementations<IHandTracker>(IHandTracker::GetModularFeatureName());
-
-		return Trackers.Num() > 0 ? Trackers[0] : nullptr;
 	}
 
 	FAutoConsoleCommandWithWorldArgsAndOutputDevice GHandProbeCommand(
@@ -126,7 +118,7 @@ void AVRHandTrackingProbe::FollowCamera()
 
 FString AVRHandTrackingProbe::PollEngineHandTracker()
 {
-	IHandTracker* Tracker = FindHandTracker();
+	IHandTracker* Tracker = UVRHandPresenceComponent::FindHandTracker();
 
 	if (!Tracker)
 	{
@@ -208,7 +200,7 @@ FString AVRHandTrackingProbe::PollMetaHandTracker()
 
 void AVRHandTrackingProbe::DrawKeypoints(EControllerHand Hand, const FColor& Color)
 {
-	IHandTracker* Tracker = FindHandTracker();
+	IHandTracker* Tracker = UVRHandPresenceComponent::FindHandTracker();
 
 	if (!Tracker)
 	{

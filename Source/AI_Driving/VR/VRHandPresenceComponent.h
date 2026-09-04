@@ -8,6 +8,7 @@
 #include "VRHandPresenceComponent.generated.h"
 
 class USceneComponent;
+class IHandTracker;
 
 UENUM(BlueprintType)
 enum class EVRHandGrip : uint8
@@ -66,6 +67,10 @@ public:
 	 *  on the wheel for the whole session */
 	UFUNCTION(BlueprintPure, Category="VR Hands")
 	bool IsHandTrackingAvailable() const { return bHandTrackingAvailable; }
+
+	/** Returns the registered OpenXR hand tracker, or null if nothing provides the feature.
+	 *  Shared so the diagnostic probe reads the same source this component acts on */
+	static IHandTracker* FindHandTracker();
 
 	/** Points the component at the wheel and the two mesh hands. Meant for an owner that builds
 	 *  those in C++; a Blueprint can just fill the properties in instead */

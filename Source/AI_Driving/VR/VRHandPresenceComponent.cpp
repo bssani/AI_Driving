@@ -12,15 +12,6 @@
 
 namespace
 {
-	/** Returns the registered OpenXR hand tracker, or null if nothing provides the feature */
-	IHandTracker* FindHandTracker()
-	{
-		const TArray<IHandTracker*> Trackers =
-			IModularFeatures::Get().GetModularFeatureImplementations<IHandTracker>(IHandTracker::GetModularFeatureName());
-
-		return Trackers.Num() > 0 ? Trackers[0] : nullptr;
-	}
-
 	/** Shows one of the two representations of a hand and hides the other */
 	void ApplyHandVisibility(USceneComponent* Tracked, USceneComponent* Grip, EVRHandGrip State)
 	{
@@ -38,6 +29,14 @@ namespace
 	}
 }
 
+IHandTracker* UVRHandPresenceComponent::FindHandTracker()
+{
+	const TArray<IHandTracker*> Trackers =
+		IModularFeatures::Get().GetModularFeatureImplementations<IHandTracker>(IHandTracker::GetModularFeatureName());
+
+	return Trackers.Num() > 0 ? Trackers[0] : nullptr;
+}
+
 UVRHandPresenceComponent::UVRHandPresenceComponent()
 {
 	PrimaryComponentTick.bCanEverTick = true;
@@ -47,7 +46,7 @@ void UVRHandPresenceComponent::BeginPlay()
 {
 	Super::BeginPlay();
 
-	const IHandTracker* Tracker = FindHandTracker();
+	const IHandTracker* Tracker = UVRHandPresenceComponent::FindHandTracker();
 	bHandTrackingAvailable = Tracker && Tracker->IsHandTrackingStateValid();
 
 	if (!bHandTrackingAvailable)
@@ -168,7 +167,7 @@ EVRHandGrip UVRHandPresenceComponent::UpdateHandGrip(EControllerHand Hand, EVRHa
 {
 	OutDistance = -1.0f;
 
-	IHandTracker* Tracker = FindHandTracker();
+	IHandTracker* Tracker = UVRHandPresenceComponent::FindHandTracker();
 
 	if (!SteeringWheel || !Tracker || !Tracker->IsHandTrackingStateValid())
 	{
@@ -288,7 +287,7 @@ void UVRHandPresenceComponent::PlaceTrackedHand(EControllerHand Hand, USceneComp
 		return;
 	}
 
-	IHandTracker* Tracker = FindHandTracker();
+	IHandTracker* Tracker = UVRHandPresenceComponent::FindHandTracker();
 
 	if (!Tracker || !Tracker->IsHandTrackingStateValid())
 	{
@@ -348,7 +347,7 @@ void UVRHandPresenceComponent::DrawDebugRim() const
 	DrawDebugCircle(GetWorld(), Centre, WheelRadius + GripReleaseDistance, 32, FColor::Orange, false, -1.0f, 0, 0.15f, PlaneX, PlaneY, false);
 
 	// and where each palm actually is, so a hand that is not triggering the grip can be explained
-	IHandTracker* Tracker = FindHandTracker();
+	IHandTracker* Tracker = UVRHandPresenceComponent::FindHandTracker();
 
 	if (!Tracker || !Tracker->IsHandTrackingStateValid())
 	{

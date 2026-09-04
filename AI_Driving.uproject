@@ -45,6 +45,14 @@
 		{
 			"Name": "OpenXRHandTracking",
 			"Enabled": true
+		},
+		{
+			"Name": "Metasound",
+			"Enabled": true
+		},
+		{
+			"Name": "VehicleSoundSystem",
+			"Enabled": true
 		}
 	]
 }
