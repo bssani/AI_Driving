@@ -9,6 +9,11 @@
 class UCameraComponent;
 class USpringArmComponent;
 class UInputAction;
+class UStaticMeshComponent;
+class USkeletalMeshComponent;
+class UAnimationAsset;
+class UVRHandPresenceComponent;
+class UPoseableMeshComponent;
 class UChaosWheeledVehicleMovementComponent;
 struct FInputActionValue;
 
@@ -39,6 +44,42 @@ class AAI_DrivingPawn : public AWheeledVehiclePawn
 	/** Back Camera component */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category ="Components", meta = (AllowPrivateAccess = "true"))
 	UCameraComponent* BackCamera;
+
+	/** Driver's seated head position. VRCamera overwrites its own relative transform with the raw
+	 *  headset pose every frame, so the eye offset has to live on this parent instead */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category ="Components", meta = (AllowPrivateAccess = "true"))
+	USceneComponent* VROrigin;
+
+	/** Camera driven by the head mounted display. Rigidly attached to the mesh so the view tracks the car exactly */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category ="Components", meta = (AllowPrivateAccess = "true"))
+	UCameraComponent* VRCamera;
+
+	/** Steering wheel the driver sees. Where a physical wheel exists this only has to line up
+	 *  with it; the hands hang off this so they turn with it */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category ="Components", meta = (AllowPrivateAccess = "true"))
+	UStaticMeshComponent* SteeringWheelMesh;
+
+	/** Hand shown while the driver is holding the wheel. The asset pack only ships a right hand,
+	 *  so this one is the same mesh mirrored across the wheel's left-right axis */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category ="Components", meta = (AllowPrivateAccess = "true"))
+	USkeletalMeshComponent* LeftGripHand;
+
+	/** Hand shown while the driver is holding the wheel */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category ="Components", meta = (AllowPrivateAccess = "true"))
+	USkeletalMeshComponent* RightGripHand;
+
+	/** Hand drawn from headset tracking while it is off the wheel. Where the Meta XR plugin is
+	 *  present this is one of its hand components, which loads the runtime hand mesh itself */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category ="Components", meta = (AllowPrivateAccess = "true"))
+	UPoseableMeshComponent* LeftTrackedHand;
+
+	/** Hand drawn from headset tracking while it is off the wheel */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category ="Components", meta = (AllowPrivateAccess = "true"))
+	UPoseableMeshComponent* RightTrackedHand;
+
+	/** Decides which hand representation the driver sees, and turns the wheel */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category ="Components", meta = (AllowPrivateAccess = "true"))
+	UVRHandPresenceComponent* HandPresence;
 
 	/** Cast pointer to the Chaos Vehicle movement component */
 	TObjectPtr<UChaosWheeledVehicleMovementComponent> ChaosVehicleMovement;
@@ -73,8 +114,23 @@ protected:
 	UPROPERTY(EditAnywhere, Category="Input")
 	UInputAction* ResetVehicleAction;
 
+	/** Recenter VR View Action. Optional; the view is also recentered whenever the vehicle is reset */
+	UPROPERTY(EditAnywhere, Category="Input")
+	UInputAction* RecenterVRAction;
+
 	/** Keeps track of which camera is active */
 	bool bFrontCameraActive = false;
+
+	/** Pose the mesh hands hold. They never let go of the rim, so one pose is enough */
+	UPROPERTY(EditAnywhere, Category="VR")
+	TObjectPtr<UAnimationAsset> GripHandPose;
+
+	/** True while this pawn is driving a head mounted display */
+	bool bVRModeActive = false;
+
+	/** Set while we still owe the driver a recenter. The headset usually has no valid pose yet
+	 *  when play begins, so the first attempt has to wait for tracking to come up */
+	bool bRecenterPending = false;
 
 	/** Keeps track of whether the car is flipped. If this is true for two flip checks, resets the vehicle automatically */
 	bool bPreviousFlipCheck = false;
@@ -140,6 +196,9 @@ protected:
 	/** Handles reset vehicle input */
 	void ResetVehicle(const FInputActionValue& Value);
 
+	/** Handles recenter VR view input */
+	void RecenterVR(const FInputActionValue& Value);
+
 public:
 
 	/** Handle steering input by input actions or mobile interface */
@@ -182,6 +241,18 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Input")
 	void DoResetVehicle();
 
+	/** Returns true if the given world is rendering to a headset. False for the extra non-VR
+	 *  windows VR Preview spawns. Static so callers don't have to wait on this pawn's BeginPlay */
+	static bool IsVRRenderingForWorld(const UWorld* World);
+
+	/** Realigns the headset's forward direction with the car. Does nothing outside VR */
+	UFUNCTION(BlueprintCallable, Category="VR")
+	void DoRecenterVR();
+
+	/** Returns true if this pawn is currently rendering to a head mounted display */
+	UFUNCTION(BlueprintPure, Category="VR")
+	bool IsVRModeActive() const { return bVRModeActive; }
+
 protected:
 
 	/** Called when the brake lights are turned on or off */
@@ -201,6 +272,14 @@ public:
 	FORCEINLINE USpringArmComponent* GetBackSpringArm() const { return BackSpringArm; }
 	/** Returns the back camera subobject */
 	FORCEINLINE UCameraComponent* GetBackCamera() const { return BackCamera; }
+	/** Returns the VR origin subobject */
+	FORCEINLINE USceneComponent* GetVROrigin() const { return VROrigin; }
+	/** Returns the VR camera subobject */
+	FORCEINLINE UCameraComponent* GetVRCamera() const { return VRCamera; }
+	/** Returns the steering wheel subobject */
+	FORCEINLINE UStaticMeshComponent* GetSteeringWheelMesh() const { return SteeringWheelMesh; }
+	/** Returns the hand presence subobject */
+	FORCEINLINE UVRHandPresenceComponent* GetHandPresence() const { return HandPresence; }
 	/** Returns the cast Chaos Vehicle Movement subobject */
 	FORCEINLINE const TObjectPtr<UChaosWheeledVehicleMovementComponent>& GetChaosVehicleMovement() const { return ChaosVehicleMovement; }
 };
