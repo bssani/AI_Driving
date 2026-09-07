@@ -9,6 +9,7 @@
 #include "Features/IModularFeatures.h"
 #include "HeadMountedDisplayTypes.h"
 #include "IHandTracker.h"
+#include "GameFramework/Pawn.h"
 
 namespace
 {
@@ -96,6 +97,28 @@ void UVRHandPresenceComponent::TickComponent(float DeltaTime, ELevelTick TickTyp
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 
 	DriveWheel();
+
+	// Hand tracking reports one person's hands, and only one vehicle has that person in it.
+	// Every other car would measure those hands against a wheel they are nowhere near, conclude
+	// its driver had let go, and show a tracked hand floating whereever the player's real hand
+	// is. Other cars keep their hands on their own wheel.
+	const APawn* OwnerPawn = Cast<APawn>(GetOwner());
+	const bool bNowDriverSeat = OwnerPawn && OwnerPawn->IsPlayerControlled() && OwnerPawn->IsLocallyControlled();
+
+	if (!bNowDriverSeat)
+	{
+		if (bIsDriverSeat || LeftGrip != EVRHandGrip::Gripped || RightGrip != EVRHandGrip::Gripped)
+		{
+			LeftGrip = EVRHandGrip::Gripped;
+			RightGrip = EVRHandGrip::Gripped;
+			ApplyVisuals();
+		}
+
+		bIsDriverSeat = false;
+		return;
+	}
+
+	bIsDriverSeat = true;
 
 	float LeftDistance = -1.0f;
 	float RightDistance = -1.0f;

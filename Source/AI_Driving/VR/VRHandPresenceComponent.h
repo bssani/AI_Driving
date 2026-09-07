@@ -150,6 +150,10 @@ private:
 	/** Whether the runtime offered hand tracking at all, checked once on BeginPlay */
 	bool bHandTrackingAvailable = false;
 
+	/** Whether this vehicle is the one the headset wearer is sitting in. Re-checked every tick so
+	 *  it doesn't depend on when possession happens */
+	bool bIsDriverSeat = false;
+
 	/** Seconds until the next debug line, so bDrawDebug doesn't spam the log every frame */
 	float DebugLogCountdown = 0.0f;
 
