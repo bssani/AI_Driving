@@ -268,6 +268,35 @@ void AAI_DrivingPawn::BeginPlay()
 	GetWorld()->GetTimerManager().SetTimer(FlipCheckTimer, this, &AAI_DrivingPawn::FlippedCheck, FlipCheckTime, true);
 }
 
+void AAI_DrivingPawn::DiscardDriverRig()
+{
+	// Hand tracking reports one person's hands, so these components have nothing to represent on
+	// an AI car. Hiding them was not enough: the tracked hand components poll the runtime and pose
+	// a skeletal mesh every frame regardless of visibility, once per hand per car. Nor is there a
+	// driver body for the mesh hands to belong to, so a car without them also reads better than one
+	// gripping its wheel with a disembodied pair.
+	USceneComponent* const DriverOnly[] = { LeftTrackedHand, RightTrackedHand, LeftGripHand, RightGripHand };
+
+	for (USceneComponent* Component : DriverOnly)
+	{
+		if (Component)
+		{
+			Component->DestroyComponent();
+		}
+	}
+
+	LeftTrackedHand = nullptr;
+	RightTrackedHand = nullptr;
+	LeftGripHand = nullptr;
+	RightGripHand = nullptr;
+
+	if (HandPresence)
+	{
+		HandPresence->DestroyComponent();
+		HandPresence = nullptr;
+	}
+}
+
 void AAI_DrivingPawn::EndPlay(EEndPlayReason::Type EndPlayReason)
 {
 	// clear the flipped check timer
@@ -279,6 +308,19 @@ void AAI_DrivingPawn::EndPlay(EEndPlayReason::Type EndPlayReason)
 void AAI_DrivingPawn::Tick(float Delta)
 {
 	Super::Tick(Delta);
+
+	// Only the car the headset wearer sits in needs hands. Deciding this at BeginPlay does not
+	// work: the game mode spawns the player's pawn and possesses it afterwards, so at BeginPlay
+	// even the driver's own car still looks unpossessed. By the first tick possession has landed.
+	if (!bDriverRigResolved)
+	{
+		bDriverRigResolved = true;
+
+		if (!IsPlayerControlled() || !IsLocallyControlled())
+		{
+			DiscardDriverRig();
+		}
+	}
 
 	// add some angular damping if the vehicle is in midair
 	bool bMovingOnGround = ChaosVehicleMovement->IsMovingOnGround();

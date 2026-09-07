@@ -137,6 +137,13 @@ protected:
 	 *  when play begins, so the first attempt has to wait for tracking to come up */
 	bool bRecenterPending = false;
 
+	/** Cleared once we have decided whether this car carries a driver, so the check runs once */
+	bool bDriverRigResolved = false;
+
+	/** Throws away the hands and the component that swaps them. Called on every car the headset
+	 *  wearer is not sitting in, which is all of them but one */
+	void DiscardDriverRig();
+
 	/** Keeps track of whether the car is flipped. If this is true for two flip checks, resets the vehicle automatically */
 	bool bPreviousFlipCheck = false;
 
