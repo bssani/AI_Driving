@@ -45,7 +45,15 @@ void AAI_DrivingPlayerController::BeginPlay()
 
 		if (VehicleUI)
 		{
-			VehicleUI->AddToViewport();
+			// Measured, because the answer is the opposite of what it sounds like: in VR a widget
+			// added to the viewport is drawn into the eye buffers and does not reach the monitor.
+			// So this leaves a readout hanging in the driver's face while the room watching the
+			// screen gets nothing - both backwards. UVRSpectatorUISubsystem is the route to the
+			// monitor; the driver's own view stays clear.
+			if (!AAI_DrivingPawn::IsVRRenderingForWorld(GetWorld()))
+			{
+				VehicleUI->AddToViewport();
+			}
 
 		} else {
 
