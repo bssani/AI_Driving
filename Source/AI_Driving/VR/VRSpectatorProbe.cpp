@@ -47,11 +47,13 @@ namespace
 			return;
 		}
 
+		Widget->RouteName = TEXT("RED  =  VIEWPORT  (AddToViewport)");
+		Widget->RouteColour = FLinearColor(0.85f, 0.f, 0.f);
+
 		Widget->AddToViewport(1000);
 		GSpectatorProbeWidget = Widget;
 
-		Ar.Log(TEXT("vr.SpectatorProbe: on. A magenta bar is at the top of the screen and a blue one ")
-			   TEXT("at the bottom. Look at the monitor, then look inside the headset."));
+		Ar.Log(TEXT("vr.SpectatorProbe: on. RED bars, top and bottom. This is the viewport route."));
 	}
 
 	FAutoConsoleCommandWithWorldArgsAndOutputDevice GSpectatorProbeCommand(

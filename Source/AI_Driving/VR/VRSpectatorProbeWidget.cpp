@@ -49,13 +49,10 @@ TSharedRef<SWidget> UVRSpectatorProbeWidget::RebuildWidget()
 		UCanvasPanel* Canvas = WidgetTree->ConstructWidget<UCanvasPanel>(UCanvasPanel::StaticClass());
 		WidgetTree->RootWidget = Canvas;
 
-		AddBanner(*WidgetTree, *Canvas,
-			TEXT("SCREEN-SPACE UMG  -  this belongs on the monitor only"),
-			FLinearColor(0.9f, 0.f, 0.6f), true);
-
-		AddBanner(*WidgetTree, *Canvas,
-			TEXT("Reading this inside the headset means screen-space UI reaches the HMD"),
-			FLinearColor(0.f, 0.4f, 0.9f), false);
+		// both bars carry the same route name and colour, so whichever one is visible answers the
+		// same question: which route put a widget in front of the driver
+		AddBanner(*WidgetTree, *Canvas, RouteName, RouteColour, true);
+		AddBanner(*WidgetTree, *Canvas, RouteName, RouteColour, false);
 	}
 
 	return Super::RebuildWidget();
