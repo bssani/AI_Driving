@@ -5,6 +5,7 @@
 #include "Engine/Engine.h"
 #include "Engine/World.h"
 #include "GameFramework/PlayerController.h"
+#include "VRSpectatorUISubsystem.h"
 
 /**
  *  vr.SpectatorProbe puts a screen-space UMG widget on the viewport and takes it away again.
@@ -57,4 +58,37 @@ namespace
 		TEXT("vr.SpectatorProbe"),
 		TEXT("Toggles a screen-space UMG widget. Shows whether viewport UI reaches the headset or only the spectator screen."),
 		FConsoleCommandWithWorldArgsAndOutputDeviceDelegate::CreateStatic(&ToggleSpectatorProbe));
+
+	void ToggleSpectatorUI(const TArray<FString>& Args, UWorld* World, FOutputDevice& Ar)
+	{
+		UVRSpectatorUISubsystem* Spectator = World ? World->GetSubsystem<UVRSpectatorUISubsystem>() : nullptr;
+
+		if (!Spectator)
+		{
+			Ar.Log(TEXT("vr.SpectatorUI: no world. Run this while playing."));
+			return;
+		}
+
+		if (Spectator->IsShowingSpectatorWidget())
+		{
+			Spectator->HideSpectatorWidget();
+			Ar.Log(TEXT("vr.SpectatorUI: off."));
+			return;
+		}
+
+		if (Spectator->ShowSpectatorWidget(UVRSpectatorProbeWidget::StaticClass()))
+		{
+			Ar.Log(TEXT("vr.SpectatorUI: on. The same banners, drawn to the spectator screen instead ")
+				   TEXT("of the viewport. Expected: monitor yes, headset no."));
+		}
+		else
+		{
+			Ar.Log(TEXT("vr.SpectatorUI: could not start. Needs a headset - there is no second screen without one."));
+		}
+	}
+
+	FAutoConsoleCommandWithWorldArgsAndOutputDevice GSpectatorUICommand(
+		TEXT("vr.SpectatorUI"),
+		TEXT("Toggles the same banners drawn onto the spectator screen rather than the viewport. Compare with vr.SpectatorProbe."),
+		FConsoleCommandWithWorldArgsAndOutputDeviceDelegate::CreateStatic(&ToggleSpectatorUI));
 }
