@@ -699,7 +699,18 @@ void URaceDirectorSubsystem::ArbitrateOvertaking()
 
 		AI->BlockingRacer = FindRacerAhead(AI, BrakeScan, P.PassingLateralClearance);
 
-		float Desired = AI->BaseLaneOffset;
+		// 방해가 없을 때 돌아갈 자리는 출발 그리드가 아니라 레이싱 라인입니다. 그리드 차선을
+		// 집으로 삼으면 추월을 마친 차가 매번 원래 차선으로 되돌아가, 왼쪽에서 출발한 차는
+		// 가운데가 비어 있어도 경기 내내 왼쪽만 달립니다.
+		//
+		// 다만 출발 직후에는 아직 세로로 벌어지지 않았으므로, 몇 초에 걸쳐 옮겨 갑니다.
+		const float GridBlend = P.GridLaneHoldSeconds > 0.f
+			? FMath::Clamp(GetRaceElapsedSeconds() / P.GridLaneHoldSeconds, 0.f, 1.f)
+			: 1.f;
+
+		const float HomeLane = FMath::Lerp(AI->BaseLaneOffset, P.RacingLineOffset, GridBlend);
+
+		float Desired = HomeLane;
 		bool bPass = false;
 
 		if (Ahead.bValid)
@@ -713,7 +724,7 @@ void URaceDirectorSubsystem::ArbitrateOvertaking()
 			if (bPass)
 			{
 				// 이미 다른 차선만큼 벌어져 있으면 굳이 더 움직이지 않습니다.
-				const float BaseSeparation = FMath::Abs(AI->BaseLaneOffset - Ahead.LateralOffset);
+				const float BaseSeparation = FMath::Abs(HomeLane - Ahead.LateralOffset);
 
 				if (BaseSeparation < P.PassingLateralClearance)
 				{

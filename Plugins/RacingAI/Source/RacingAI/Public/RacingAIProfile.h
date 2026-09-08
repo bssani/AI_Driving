@@ -73,6 +73,25 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Steering", meta = (ClampMin = "10.0"))
 	float LateralOffsetRate = 300.f;
 
+	/**
+	 * 방해가 없을 때 돌아갈 자리. 스플라인 중심 기준이며 오른쪽이 양수입니다.
+	 *
+	 * 그리드 차선은 출발할 때 서 있던 자리일 뿐 달리고 싶은 자리가 아닙니다. 그것을 끝까지
+	 * 붙들면 왼쪽에서 출발한 차는 가운데가 비어 있어도 경기 내내 왼쪽 연석만 따라갑니다.
+	 * 코스에 빠른 라인이 따로 있으면 그쪽으로 옮기세요.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Steering")
+	float RacingLineOffset = 0.f;
+
+	/**
+	 * 출발 후 그리드 차선에서 라인으로 옮겨 가는 데 걸리는 시간 (초).
+	 *
+	 * 0이면 출발 신호와 동시에 전부 한 줄로 몰려 서로를 받습니다. 세로로 벌어질 틈을 준 뒤
+	 * 모이도록 몇 초를 둡니다.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Steering", meta = (ClampMin = "0.0"))
+	float GridLaneHoldSeconds = 5.f;
+
 	//--------------------------------------------------------------------------
 	// 속도
 	//--------------------------------------------------------------------------
