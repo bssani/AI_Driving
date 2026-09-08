@@ -19,6 +19,7 @@ public class AI_Driving : ModuleRules
 			"PhysicsCore",
 			"UMG",
 			"Slate",
+			"SlateCore",
 			"HeadMountedDisplay"
 		});
 
