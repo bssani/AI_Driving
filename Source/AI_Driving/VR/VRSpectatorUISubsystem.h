@@ -49,9 +49,21 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "VR|Spectator")
 	FIntPoint DrawSize = FIntPoint(1920, 1080);
 
+	/** How often the overlay is redrawn, in times per second.
+	 *
+	 *  Deliberately not once per frame. A lap counter and a position change a few times a race and
+	 *  a speed readout is unreadable faster than the eye can follow, so redrawing at the headset's
+	 *  refresh rate spends most of its work on frames nobody can tell apart. The audience cannot
+	 *  see the difference between this and 90; the frame budget can. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "VR|Spectator", meta = (ClampMin = "1.0"))
+	float RedrawsPerSecond = 15.f;
+
 	// Begin UTickableWorldSubsystem interface
 	virtual void Tick(float DeltaTime) override;
 	virtual TStatId GetStatId() const override { RETURN_QUICK_DECLARE_CYCLE_STAT(UVRSpectatorUISubsystem, STATGROUP_Tickables); }
+
+	/** Nothing to do at all while no overlay is up, so do not even be ticked */
+	virtual bool IsTickable() const override { return SpectatorWidget != nullptr; }
 	virtual void Deinitialize() override;
 	// End UTickableWorldSubsystem interface
 
@@ -67,4 +79,7 @@ private:
 
 	TSharedPtr<FWidgetRenderer> WidgetRenderer;
 	TSharedPtr<SWidget> SlateWidget;
+
+	/** Time owed before the next redraw */
+	float RedrawCountdown = 0.f;
 };

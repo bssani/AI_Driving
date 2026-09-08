@@ -94,6 +94,7 @@ void UVRSpectatorUISubsystem::HideSpectatorWidget()
 	WidgetRenderer.Reset();
 	SpectatorWidget = nullptr;
 	RenderTarget = nullptr;
+	RedrawCountdown = 0.f;
 }
 
 void UVRSpectatorUISubsystem::Tick(float DeltaTime)
@@ -105,9 +106,23 @@ void UVRSpectatorUISubsystem::Tick(float DeltaTime)
 		return;
 	}
 
-	// redrawn every frame so anything the widget shows can change - lap, position, speed
+	RedrawCountdown -= DeltaTime;
+
+	if (RedrawCountdown > 0.f)
+	{
+		return;
+	}
+
+	const float Interval = 1.f / FMath::Max(RedrawsPerSecond, 1.f);
+
+	// counted from now rather than added to what is owed, so a hitch does not leave the overlay
+	// owing a burst of redraws it would then do back to back
+	RedrawCountdown = Interval;
+
+	// the accumulated interval is what the widget has actually lived through, so animations and
+	// timers inside it advance at the right rate despite being drawn less often
 	WidgetRenderer->DrawWidget(RenderTarget, SlateWidget.ToSharedRef(),
-		FVector2D(DrawSize.X, DrawSize.Y), DeltaTime);
+		FVector2D(DrawSize.X, DrawSize.Y), Interval);
 }
 
 void UVRSpectatorUISubsystem::Deinitialize()
