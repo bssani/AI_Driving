@@ -192,4 +192,8 @@ private:
 
 	/** 연속 후진 시도 횟수. 한도를 넘기면 재배치로 승격합니다 */
 	int32 StuckAttempts = 0;
+
+	/** 지난 갱신 시점의 누적 주행 거리. 차이를 시간으로 나눠 트랙을 따라 나아가는 속도를 낸다 */
+	float LastProgressDistance = 0.f;
+	bool bHasProgressReference = false;
 };

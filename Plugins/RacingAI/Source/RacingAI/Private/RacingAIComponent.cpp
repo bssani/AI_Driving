@@ -157,6 +157,8 @@ void URacingAIComponent::ResetForNewRace(float InLaneOffset)
 	ReverseTimer = 0.f;
 	FlippedTimer = 0.f;
 	StuckAttempts = 0;
+	LastProgressDistance = 0.f;
+	bHasProgressReference = false;
 	TimeSinceAdvance = 0.f;
 
 	RacerAhead = FRacerAhead();
@@ -374,8 +376,12 @@ bool URacingAIComponent::UpdateRecovery(const ARacingSpline& Track, float DeltaT
 
 	FlippedTimer = bFlipped ? FlippedTimer + DeltaTime : 0.f;
 
-	const bool bOffTrack = P.OffTrackRespawnDistance > 0.f
-		&& FMath::Abs(Progress.LateralOffset) > P.OffTrackRespawnDistance;
+	// 트랙 폭에 비례해서 본다. 절대 거리로 두면 넓은 시험장에서 잡은 값이 좁은 서킷에서는
+	// 아무 때도 걸리지 않아, 벽에 붙어 못 나오는 차를 구조하지 못한다.
+	const float OffTrackLimit = Track.TrackHalfWidth * P.OffTrackRespawnWidthScale;
+
+	const bool bOffTrack = P.OffTrackRespawnWidthScale > 0.f
+		&& FMath::Abs(Progress.LateralOffset) > OffTrackLimit;
 
 	if (FlippedTimer >= P.FlippedTimeToRespawn || bOffTrack)
 	{
@@ -384,8 +390,33 @@ bool URacingAIComponent::UpdateRecovery(const ARacingSpline& Track, float DeltaT
 		return true;
 	}
 
-	// 스턱 판정. 느린데 앞이 막혀 있으면 후진으로 전환합니다.
-	if (FMath::Abs(Progress.ForwardSpeed) < P.StuckSpeedThreshold)
+	// 갇힘 판정. 얼마나 빠른가가 아니라 트랙을 따라 얼마나 나아가는가로 본다.
+	//
+	// 속도로 재면 벽을 긁는 차를 놓친다. 바퀴가 돌고 차체가 벽을 따라 미끄러지면 속도계는
+	// 멀쩡한 값을 내지만 결승선에는 조금도 가까워지지 않고, 그대로 경기가 끝난다.
+	//
+	// 거리 차가 아니라 속도로 재는 이유는 갱신 주기 때문이다. AI는 20Hz로 판단하므로 한 번에
+	// 나아가는 거리가 주기에 따라 달라진다. 거리로 문턱을 두면 그 문턱이 곧 최저 속도가 되어
+	// 멀쩡히 달리는 차가 갇힌 것으로 잡힌다.
+	float AlongTrackSpeed = P.StuckProgressSpeed;
+
+	if (bHasProgressReference && DeltaTime > KINDA_SMALL_NUMBER)
+	{
+		const float Delta = Progress.TotalDistance - LastProgressDistance;
+		const float Length = Track.GetLength();
+
+		// 랩 계수가 튀거나 재배치로 순간이동하면 거리 차가 트랙 길이만큼 뛴다. 진행으로도
+		// 정지로도 읽으면 안 되므로 이번 판정은 건너뛴다.
+		if (Length <= KINDA_SMALL_NUMBER || FMath::Abs(Delta) < Length * 0.5f)
+		{
+			AlongTrackSpeed = Delta / DeltaTime;
+		}
+	}
+
+	LastProgressDistance = Progress.TotalDistance;
+	bHasProgressReference = true;
+
+	if (AlongTrackSpeed < P.StuckProgressSpeed)
 	{
 		StuckTimer += DeltaTime;
 
@@ -438,9 +469,14 @@ void URacingAIComponent::RespawnOnTrack(const ARacingSpline& Track)
 		return;
 	}
 
-	const float Distance = Progress.DistanceAlongSpline;
+	const URacingAIProfile& P = GetEffectiveProfile();
 
-	const FVector Location = Track.GetOffsetLocationAtDistance(Distance, BaseLaneOffset) + FVector(0.f, 0.f, 150.f);
+	// 갇힌 자리 그대로, 그것도 그리드 차선으로 되돌리고 있었다. 그리드 차선은 출발할 때 서
+	// 있던 자리일 뿐이어서 좁은 트랙에서는 도로 밖일 수 있고, 그러면 같은 벽으로 돌아가 같은
+	// 자리에 다시 갇힌다. 달리던 라인 위로 돌려놓는다.
+	const float Distance = Progress.DistanceAlongSpline + P.RespawnAheadDistance;
+
+	const FVector Location = Track.GetOffsetLocationAtDistance(Distance, P.RacingLineOffset) + FVector(0.f, 0.f, 150.f);
 	const FRotator Rotation = Track.GetDirectionAtDistance(Distance).Rotation();
 
 	Owner->SetActorTransform(FTransform(Rotation, Location), false, nullptr, ETeleportType::TeleportPhysics);
@@ -453,6 +489,9 @@ void URacingAIComponent::RespawnOnTrack(const ARacingSpline& Track)
 
 	FlippedTimer = 0.f;
 	StuckAttempts = 0;
+
+	// 순간이동한 뒤의 거리 차는 진행이 아니므로 기준을 버린다
+	bHasProgressReference = false;
 	CurrentSteering = 0.f;
 	State = ERacingAIState::Racing;
 

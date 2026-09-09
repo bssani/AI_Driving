@@ -222,9 +222,15 @@ public:
 	// 복구
 	//--------------------------------------------------------------------------
 
-	/** 이 속도 미만이면 (cm/s) 스턱 판정 타이머가 돕니다 */
+	/**
+	 * 이 속도 미만으로 트랙을 따라 나아가면 (cm/s) 갇힘 타이머가 돕니다.
+	 *
+	 * 차가 얼마나 빠른가가 아니라 트랙을 따라 얼마나 나아가는가입니다. 벽을 긁는 차는
+	 * 바퀴가 돌고 차체가 미끄러져 속도계는 멀쩡하지만 결승선에는 조금도 가까워지지 않습니다.
+	 * 이렇게 재야 멈춘 차와 긁는 차가 함께 걸립니다.
+	 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Recovery", meta = (ClampMin = "0.0"))
-	float StuckSpeedThreshold = 60.f;
+	float StuckProgressSpeed = 60.f;
 
 	/** 스턱으로 판정하기까지의 시간 (초) */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Recovery", meta = (ClampMin = "0.2", Units = "s"))
@@ -233,9 +239,9 @@ public:
 	/**
 	 * 출발 직후 스턱 판정을 유예하는 시간 (초).
 	 *
-	 * 정지 상태에서 가속하는 동안에는 속도가 StuckSpeedThreshold를 넘기까지
-	 * 시간이 걸립니다. 이 유예가 없으면 출발 신호마다 모든 AI가 갇힌 것으로
-	 * 오인되어 잠깐 후진합니다. 무거운 차일수록 넉넉히 주세요.
+	 * 정지 상태에서 가속하는 동안에는 진행 속도가 StuckProgressSpeed를 넘기까지 시간이
+	 * 걸립니다. 이 유예가 없으면 출발 신호마다 모든 AI가 갇힌 것으로 오인되어 잠깐
+	 * 후진합니다. 무거운 차일수록 넉넉히 주세요.
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Recovery", meta = (ClampMin = "0.0", Units = "s"))
 	float LaunchGraceSeconds = 3.f;
@@ -262,7 +268,22 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Recovery", meta = (ClampMin = "0.5", Units = "s"))
 	float FlippedTimeToRespawn = 2.5f;
 
-	/** 트랙에서 이 거리 이상 벗어나면 재배치합니다 (cm). 0이면 끔 */
+	/**
+	 * 트랙 반폭의 몇 배까지 벗어나면 재배치할지입니다. 0이면 끔.
+	 *
+	 * 절대 거리로 두면 트랙마다 다시 잡아야 하고, 넓은 시험장 기준으로 잡힌 값이 좁은
+	 * 서킷에서는 아무 때도 걸리지 않습니다. 벽에 붙어 5m 벗어난 차는 40m를 넘지 못하므로
+	 * 영원히 이탈이 아닙니다. 폭에 비례해 두면 트랙이 바뀌어도 뜻이 같습니다.
+	 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Recovery", meta = (ClampMin = "0.0"))
-	float OffTrackRespawnDistance = 4000.f;
+	float OffTrackRespawnWidthScale = 1.5f;
+
+	/**
+	 * 재배치할 때 원래 지점보다 얼마나 앞에 놓을지입니다 (cm).
+	 *
+	 * 0이면 갇힌 그 자리에 다시 놓습니다. 라인 위로 돌려놓는 것만으로 대개 충분하지만,
+	 * 막고 있는 것이 다른 차라면 조금 앞으로 밀어야 다시 갇히지 않습니다.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Recovery", meta = (ClampMin = "0.0", Units = "cm"))
+	float RespawnAheadDistance = 0.f;
 };
