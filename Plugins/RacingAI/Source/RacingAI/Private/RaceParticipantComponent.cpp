@@ -181,15 +181,25 @@ void URaceParticipantComponent::HoldVehicleStill()
 		return;
 	}
 
-	Root->SetPhysicsLinearVelocity(FVector::ZeroVector);
+	// 아래로 떨어지는 것은 그대로 둡니다. 속도를 통째로 0으로 만들면 중력까지 지워져,
+	// 차가 스폰된 높이에 그대로 떠 있게 됩니다. 실제로 그렇게 만들어 놓고 재 보니 잠긴 차가
+	// 72cm 공중에 있었습니다. 위로 튀어 오르는 것만 막고, 앞뒤 좌우로 나가는 것을 막습니다.
+	const FVector Velocity = Root->GetPhysicsLinearVelocity();
+
+	Root->SetPhysicsLinearVelocity(FVector(0.f, 0.f, FMath::Min(Velocity.Z, 0.f)));
 	Root->SetPhysicsAngularVelocityInDegrees(FVector::ZeroVector);
 
 	// 속도를 눌러도 한 스텝 안에서는 조금씩 밀립니다. 쌓여서 출발선을 넘기 전에 되돌립니다.
-	const float Drift = FVector::Dist(Owner->GetActorLocation(), LockedTransform.GetLocation());
+	// 높이는 재지도 되돌리지도 않습니다. 가라앉는 중인 차를 다시 들어 올리게 됩니다.
+	const FVector Current = Owner->GetActorLocation();
+	const FVector Locked = LockedTransform.GetLocation();
 
-	if (Drift > LockedDriftTolerance)
+	if (FVector::DistSquared2D(Current, Locked) > FMath::Square(LockedDriftTolerance))
 	{
-		Owner->SetActorTransform(LockedTransform, false, nullptr, ETeleportType::TeleportPhysics);
+		FTransform Restore = LockedTransform;
+		Restore.SetLocation(FVector(Locked.X, Locked.Y, Current.Z));
+
+		Owner->SetActorTransform(Restore, false, nullptr, ETeleportType::TeleportPhysics);
 	}
 }
 

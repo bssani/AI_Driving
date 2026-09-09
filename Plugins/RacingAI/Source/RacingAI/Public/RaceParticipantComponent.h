@@ -126,13 +126,14 @@ public:
 	bool IsInputLocked() const { return bInputLocked; }
 
 	/**
-	 * 잠긴 차가 이만큼 (cm) 밀리면 제자리로 되돌립니다.
+	 * 잠긴 차가 이만큼 (cm) 밀리면 제자리로 되돌립니다. 좌우 앞뒤만 재며 높이는 보지 않습니다.
 	 *
-	 * 속도를 0으로 눌러도 물리는 한 스텝 안에서 조금씩 밀어냅니다. 카운트다운이 길면
-	 * 그 조금이 쌓여 출발선을 넘습니다.
+	 * 속도를 0으로 눌러도 물리는 한 스텝 안에서 조금씩 밀어냅니다. 실측 2.4cm/s이므로
+	 * 카운트다운이 길면 쌓여서 출발선을 넘습니다. 작게 둘수록 자주, 대신 눈에 띄지 않게
+	 * 되돌립니다. 크게 두면 한 번에 크게 튀어 그 순간이 보입니다.
 	 */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Racing AI", meta = (ClampMin = "1.0", Units = "cm"))
-	float LockedDriftTolerance = 30.f;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Racing AI", meta = (ClampMin = "0.5", Units = "cm"))
+	float LockedDriftTolerance = 5.f;
 
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
 

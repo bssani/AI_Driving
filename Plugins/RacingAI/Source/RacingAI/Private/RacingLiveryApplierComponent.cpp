@@ -43,6 +43,16 @@ void URacingLiveryApplierComponent::GatherMeshes(TArray<UMeshComponent*>& OutMes
 
 bool URacingLiveryApplierComponent::IsPaintSlot(const UMeshComponent& Mesh, int32 SlotIndex, FName SlotName) const
 {
+	// 직접 적어 준 자리가 가장 우선입니다.
+	for (const FRacingLiverySlot& Target : PaintSlots)
+	{
+		if (Target.SlotIndex == SlotIndex
+			&& (Target.MeshComponentName.IsNone() || Target.MeshComponentName == Mesh.GetFName()))
+		{
+			return true;
+		}
+	}
+
 	if (!SlotName.IsNone() && PaintSlotNames.Contains(SlotName))
 	{
 		return true;

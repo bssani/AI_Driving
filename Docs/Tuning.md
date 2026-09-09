@@ -210,14 +210,29 @@ racing.DumpMaterialSlots
 차량 폰에 **`Racing Livery Applier` 컴포넌트**를 붙인다. 스포너는 차량이나 그 컴포넌트가
 `IRacingVehicleLivery`를 구현하고 있으면 도색을 통째로 맡기므로, 붙이기만 하면 된다.
 
-찾는 방법이 둘이고 **둘 중 하나만 맞아도 칠한다.**
+찾는 방법이 셋이고 **하나만 맞아도 칠한다.** 차량 구성에 맞는 것을 고른다.
 
-- **`Paint Slot Names`** — 슬롯 이름으로 찾는다. 이름이 분명하면 이게 가장 정확하다.
-  템플릿 차량은 `MI_SportsCarBody` 하나면 된다
+- **`Paint Slots`** — 메시 이름과 슬롯 번호로 콕 집는다. 가장 확실하다.
+  차체가 문·지붕·보닛으로 쪼개져 있고 각 메시마다 슬롯이 여럿이면, 발라야 할 자리가
+  "차체 메시의 3번, 문 메시의 6번"처럼 흩어진다. 아래 둘로 집어낼 공통점이 없으면
+  여기에 자리를 그대로 나열한다.
+  메시 이름을 비우면 모든 메시의 그 번호 슬롯이 대상이 된다
+
+  ```
+  Paint Slots
+    [0] Mesh Component Name = Body    Slot Index = 3
+    [1] Mesh Component Name = Door_L  Slot Index = 6
+    [2] Mesh Component Name = Door_R  Slot Index = 6
+    [3] Mesh Component Name = Roof    Slot Index = 1
+  ```
+
 - **`Paint Materials`** — 지금 발린 머티리얼의 **베이스가 같은** 슬롯을 전부 찾는다.
-  슬롯 이름이 제각각이거나 메시가 여러 개로 쪼개져 있을 때 쓴다.
-  주의: 위 예에서 `M_SportsCarBase`를 넣으면 0번 슬롯까지 같이 잡힌다. 베이스를 공유하는
-  슬롯이 여럿이면 이름 쪽을 쓰거나 둘을 섞어 쓴다
+  자리가 흩어져 있어도 도장 머티리얼이 같다면 이쪽이 한 줄로 끝난다. 문·지붕·보닛이
+  같은 도장 머티리얼을 쓰는 차량이라면 이게 가장 짧다.
+  주의: 위 템플릿 차량처럼 차체와 트림이 베이스를 공유하면 0번 슬롯까지 같이 잡힌다.
+  그럴 때는 `Paint Slots`나 슬롯 이름 쪽을 쓴다
+- **`Paint Slot Names`** — 슬롯 이름으로 찾는다. 이름이 분명하면 읽기 좋다.
+  템플릿 차량은 `MI_SportsCarBody` 하나면 된다
 
 그 밖에:
 
@@ -248,7 +263,8 @@ RacingRed / RacingBlue / RacingYellow / RacingWhite. 각각 머티리얼과 대�
 
 ### 확인된 동작 (2026-09-10)
 
-`Paint Slot Names = [MI_SportsCarBody]`로 두고 4대를 스폰했다.
+`Paint Slots = [Chassis_Main / 1]`로 두고 4대를 스폰했다.
+`Paint Slot Names = [MI_SportsCarBody]`로도 같은 결과가 나왔다.
 
 ```
 BP_SportsCar_Pawn_C_0  RacingWhite   Chassis_Main[1] = MID_MI_Livery_White_0
@@ -320,6 +336,15 @@ BP_SportsCar_Pawn_C_3  RacingBlue    Chassis_Main[1] = MID_MI_Livery_Blue_0
 컨트롤러 자신의 입력 컴포넌트는 그대로 남으므로, **스티어링 휠처럼 컨트롤러 쪽에 바인딩된
 조작은 잠금을 그냥 통과한다.**
 
-그래서 잠긴 동안에는 매 틱 차량을 직접 붙잡는다. 속도를 0으로 누르고, `LockedDriftTolerance`
-(기본 30 cm)만큼 밀리면 제자리로 되돌린다. 무브먼트 컴포넌트에 풀 스로틀을 직접 넣어도
-움직이지 않는 것을 확인했다.
+그래서 잠긴 동안에는 매 틱 차량을 직접 붙잡는다. 무브먼트 컴포넌트에 풀 스로틀을 직접
+넣어도 0.0 km/h로 서 있는 것을 확인했다.
+
+**붙잡을 때 아래로 떨어지는 것까지 막으면 안 된다.** 속도를 통째로 0으로 만들면 중력도 같이
+지워져서 차가 스폰된 높이에 그대로 뜬다. 실제로 그렇게 만들어 놓고 재 보니 잠긴 차가
+z=88.5, 안 잠긴 AI가 z=16.6이었다. 72 cm 공중에 있었다는 뜻이다. 지금은 아래 방향 속도는
+그대로 두고 위로 튀는 것과 좌우 앞뒤로 나가는 것만 막는다.
+
+밀림은 실측 2.4 cm/s다. 물리가 한 스텝 안에서 조금씩 밀어내기 때문이다.
+`LockedDriftTolerance`(기본 5 cm)만큼 밀리면 좌우 앞뒤만 제자리로 되돌린다. 높이는 재지도
+되돌리지도 않는다. 가라앉는 중인 차를 다시 들어 올리게 되기 때문이다. 크게 두면 한 번에
+크게 튀어 그 순간이 눈에 띈다.
