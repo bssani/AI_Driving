@@ -143,8 +143,17 @@ Quest 2, 눈당 2080×2096(합계 8.7 MPix) 기준. 플랫 PIE에서 같은 픽�
 
 ## 개발 중 알아둘 것
 
-**`bSubsteppingAsync=True`라 `OnActorHit`이 게임 스레드로 오지 않는다.** 충돌 이벤트에
-의존하는 코드는 동작하지 않는다. 충돌음은 속도 변화로 대신 잡는다.
+**`OnActorHit`은 실제로 온다 (2026-09-10 측정, 이전 서술은 틀렸다).** `bSubsteppingAsync=True`면
+히트 이벤트가 게임 스레드에 닿지 않는다고 적어 뒀었으나, 벽을 긁혀 보니 매 프레임 들어왔다.
+단, 물리 바디가 `SetNotifyRigidBodyCollision(true)`여야 한다. 이 플래그는 기본이 꺼짐이고,
+사운드 플러그인과 `UVehicleImpactFXComponent`가 각각 켠다. 켜지지 않은 프로젝트로 옮기면
+아무 이벤트도 오지 않으므로, 속도 변화로 잡는 대체 경로는 그대로 둔다.
+
+**접촉은 접촉이 끝날 때까지 매 프레임 보고된다.** 그래서 벽을 스치는 한 번의 사건이
+초당 여덟 번의 충돌음과 프레임마다 하나씩의 스파크가 된다. 충돌음은
+`ImpactEscalation`(이번 접촉에서 가장 컸던 것보다 이 배수 이상 커야 다시 울림)과
+`ContactReleaseTime`(이만큼 끊겨야 새 접촉)으로, 스파크는 `ScrapeInterval`로 묶는다.
+실측(벽 긁기 40초): 손보기 전 충돌음 6회·스파크 20개, 손본 뒤 충돌음 2회·스파크 5개.
 
 **CSV 프로파일러를 쓸 수 없다.** 5.7.4에서 `-csvGpuStats`나 `-csvCaptureFrames`를 주면
 시작 직후 `IsRayTracingAllowed() may only be called once RHI is initialized`로 죽는다.
@@ -172,9 +181,13 @@ Quest 2, 눈당 2080×2096(합계 8.7 MPix) 기준. 플랫 PIE에서 같은 픽�
 - **주행 중 시야만 바로잡을 수단.** 지금은 차량 리셋(`R`)에 딸려 있어 차가 멈춘다. 전용
   `IA_RecenterVR`을 만들어 `IMC_Vehicle_Default`에 매핑하고 폰의 `RecenterVRAction`에
   물리면 된다. C++ 쪽은 준비되어 있다
-- **충돌 스파크의 나이아가라 시스템.** `UVehicleImpactFXComponent`는 폰에 붙어 있고 접촉
-  지점까지 찾아내지만, `SparkSystem`이 비어 있어 아무것도 나오지 않는다. 스파크 시스템을
-  하나 만들어 지정하면 된다. `Severity` 부동소수 파라미터를 두면 세게 박을수록 많이 튄다
+- **스파크 모양 다듬기.** `Content/VehicleFX/NS_ImpactSparks`가 붙어 있고 접촉 지점에서
+  터지는 것까지 확인했지만, 엔진 템플릿(`DirectionalBurst`)을 그대로 복제한 것이라 아직
+  하얀 스프라이트 뭉치다. 나이아가라 에디터에서 손볼 곳은 넷이다. 스프라이트 렌더러의
+  Alignment를 Velocity Aligned로, 머티리얼을 가산(additive) 계열로, 색을 주황~노랑으로,
+  Lifetime을 0.3~0.6초로 줄이고 Gravity Force와 Drag를 넣는다. `Severity`라는 float
+  유저 파라미터를 만들어 Spawn Burst 개수에 물리면 세게 박을수록 많이 튄다.
+  컴포넌트가 매번 그 값을 넣어 준다
 - **도색 대상 지정.** `URacingLiveryApplierComponent`를 차량에 붙이고 `PaintMaterials`에
   차체 도장 머티리얼을 넣으면, 슬롯 이름과 번호가 메시마다 달라도 전부 잡힌다. 구성은
   `racing.DumpMaterialSlots`로 먼저 확인한다
@@ -191,8 +204,9 @@ Quest 2, 눈당 2080×2096(합계 8.7 MPix) 기준. 플랫 PIE에서 같은 픽�
 - **관객 화면 UI의 내용.** 띄우는 경로는 만들어 뒀다(`UVRSpectatorUISubsystem`). 무엇을
   띄울지는 정해지지 않았다. 순위와 랩이 후보고, `RaceDirectorSubsystem`에 필요한 델리게이트가
   모두 나와 있다
-- **스크레이프 사운드.** 비동기 물리에서는 접촉 정보가 오지 않는다. `UVehicleImpactFXComponent`가
-  쓰는 방법(속도 변화로 충돌을 잡고, 밀린 반대 방향으로 스윕해 접촉면을 찾는다)이면 지점은
-  구할 수 있으므로 되살릴 여지는 있다. 지금은 소리 쪽에 붙이지 않았다
+- **스크레이프 사운드.** 접촉 정보가 오므로 기술적으로는 된다. 실제로 `MS_ScrapeSound`가
+  울리고 있었고, 벽을 세우자마자 "이상한 소리"로 들렸다. 이번 데모에서는 충돌음 하나만
+  쓰기로 하고 `DA_SportsCar_Dynamic`의 `ScrapeSound`를 비웠다. 되살리려면 그 칸에 다시
+  넣으면 되고, 그 전에 MetaSound가 `Speed`/`Volume` 입력을 제대로 받는지부터 확인할 것
 - **차량 템플릿 변형.** `Variant_TimeTrial`, `OffroadCar`, `Lvl_Offroad`, `Lvl_Timetrial`은
   데모 두 맵 어디서도 참조하지 않는 템플릿 잔재다. 런타임 비용이 없어 남겨 둔다

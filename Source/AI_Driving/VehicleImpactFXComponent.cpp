@@ -69,6 +69,19 @@ void UVehicleImpactFXComponent::HandleActorHit(AActor* SelfActor, AActor* OtherA
 		return;
 	}
 
+	// Contact is reported every frame while the car stays against the wall, so a scrape has to be
+	// paced. Without this a single rub along a barrier spawns a system per frame, which is both a
+	// solid sheet of sparks and a lot of Niagara instances.
+	const UWorld* World = GetWorld();
+	const double Now = World ? World->GetTimeSeconds() : 0.0;
+
+	if (Now - LastSparkTime < ScrapeInterval)
+	{
+		return;
+	}
+
+	LastSparkTime = Now;
+
 	const float Severity = FMath::Clamp(
 		(ClosingSpeed - MinImpactSpeed) / FMath::Max(MaxImpactSpeed - MinImpactSpeed, 1.f), 0.f, 1.f);
 
@@ -228,4 +241,7 @@ void UVehicleImpactFXComponent::SpawnSparks(const FVector& Location, const FVect
 	{
 		Spawned->SetVariableFloat(SeverityParameterName, Severity);
 	}
+
+	UE_LOG(LogAI_Driving, Verbose, TEXT("Sparks at %s (severity %.2f) on %s"),
+		*Location.ToCompactString(), Severity, *GetNameSafe(GetOwner()));
 }
