@@ -11,18 +11,19 @@ class UNiagaraSystem;
 /**
  *  Spawns sparks where a vehicle hits something.
  *
- *  Finding out that a collision happened is the easy half. The hard half is finding out *where*,
- *  and this project cannot do it the usual way: physics runs with async substepping
- *  (bSubsteppingAsync in DefaultEngine.ini), and with that on, OnActorHit does not reach the game
- *  thread. There is no FHitResult to read a contact point out of.
+ *  Hit events are the main route and they do arrive, async substepping or not, as long as the
+ *  physics bodies have SetNotifyRigidBodyCollision on - which the sound plugin and this component
+ *  both switch on for the owner. They carry an exact contact point and surface normal.
  *
- *  So the collision is spotted the way the sound plugin spots it - as a loss of speed too sharp
- *  for driving to explain - and then the contact point is found on purpose: the impulse pushed the
- *  car along the change in velocity, so whatever it hit is in the opposite direction. A short
- *  sweep that way lands on the surface, and the sparks go there, facing out along its normal.
+ *  Where they don't arrive, the collision is spotted the way the sound plugin spots it - as a loss
+ *  of speed too sharp for driving to explain - and the contact point is worked out: the impulse
+ *  pushed the car along the change in velocity, so whatever it hit is in the opposite direction,
+ *  and a short sweep that way lands on the surface.
  *
- *  The hit event is still subscribed to. It costs nothing when it never fires, and if substepping
- *  is ever turned off it gives a contact point straight away without a sweep.
+ *  What counts as worth showing is not what counts as worth hearing. A crash is judged on how fast
+ *  the surfaces closed, but sparks come from grinding, so a contact sparks when the surfaces are
+ *  sliding past each other as well - otherwise a car brushing down a barrier throws nothing and
+ *  the only thing that sparks is a square hit.
  */
 UCLASS(ClassGroup = "Vehicle", meta = (BlueprintSpawnableComponent, DisplayName = "Vehicle Impact FX"))
 class AI_DRIVING_API UVehicleImpactFXComponent : public UActorComponent
@@ -54,6 +55,21 @@ public:
 	float MaxImpactSpeed = 1600.f;
 
 	/**
+	 *  Sliding speed (cm/s) along a surface below which a contact does not spark.
+	 *
+	 *  Sparks come from grinding, not from crumpling. Judging them only on how fast the surfaces
+	 *  closed - which is what the crash sound is judged on - means a car brushing down a barrier
+	 *  throws nothing, because sliding along a wall has almost no closing speed at all. Then the
+	 *  only thing that sparks is a square hit, which in a race is mostly car on car.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Impact FX", meta = (ClampMin = "0.0"))
+	float MinScrapeSpeed = 300.f;
+
+	/** Sliding speed (cm/s) that counts as a full-severity scrape */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Impact FX", meta = (ClampMin = "1.0"))
+	float MaxScrapeSpeed = 4000.f;
+
+	/**
 	 *  Deceleration (cm/s^2) above which a frame is treated as contact rather than driving.
 	 *
 	 *  Braking and cornering also slow a car down. This has to sit above what the vehicle can do
@@ -64,7 +80,7 @@ public:
 
 	/** Keep throwing sparks while a scrape continues, this often (seconds) */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Impact FX", meta = (ClampMin = "0.02", Units = "s"))
-	float ScrapeInterval = 0.08f;
+	float ScrapeInterval = 0.12f;
 
 	/** How far past the vehicle's own bounds to look for the surface it hit (cm) */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Impact FX", meta = (ClampMin = "0.0"))
@@ -90,6 +106,10 @@ protected:
 private:
 	UFUNCTION()
 	void HandleActorHit(AActor* SelfActor, AActor* OtherActor, FVector NormalImpulse, const FHitResult& Hit);
+
+	/** Decides whether a contact is worth showing and throws the sparks. Both routes end here so
+	 *  they judge a contact the same way */
+	void ReportContact(const FVector& Location, const FVector& Normal, const FVector& RelativeVelocity);
 
 	/** Looks for what the vehicle hit, given the direction the impulse pushed it */
 	bool FindContactPoint(const FVector& PushDirection, FVector& OutLocation, FVector& OutNormal) const;

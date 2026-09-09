@@ -60,18 +60,13 @@ void UVehicleImpactFXComponent::HandleActorHit(AActor* SelfActor, AActor* OtherA
 
 	const FVector RelativeVelocity = SelfActor->GetVelocity() - (OtherActor ? OtherActor->GetVelocity() : FVector::ZeroVector);
 
-	// How fast the surfaces closed, not how fast the car was going. Sliding along a barrier at
-	// 200 km/h is a scrape; meeting it head on at 40 is a crash.
-	const float ClosingSpeed = FMath::Abs(FVector::DotProduct(RelativeVelocity, Hit.ImpactNormal));
+	ReportContact(Hit.ImpactPoint, Hit.ImpactNormal, RelativeVelocity);
+}
 
-	if (ClosingSpeed < MinImpactSpeed)
-	{
-		return;
-	}
-
-	// Contact is reported every frame while the car stays against the wall, so a scrape has to be
-	// paced. Without this a single rub along a barrier spawns a system per frame, which is both a
-	// solid sheet of sparks and a lot of Niagara instances.
+void UVehicleImpactFXComponent::ReportContact(const FVector& Location, const FVector& Normal, const FVector& RelativeVelocity)
+{
+	// Contact is reported every frame for as long as it lasts, so a scrape has to be paced.
+	// Without this a single rub along a barrier spawns a system per frame.
 	const UWorld* World = GetWorld();
 	const double Now = World ? World->GetTimeSeconds() : 0.0;
 
@@ -80,12 +75,35 @@ void UVehicleImpactFXComponent::HandleActorHit(AActor* SelfActor, AActor* OtherA
 		return;
 	}
 
+	// Split the contact into how fast the surfaces are closing and how fast they are sliding past
+	// each other. A head-on hit is all closing; a car brushing down a barrier is all sliding.
+	const float IntoSurface = FVector::DotProduct(RelativeVelocity, Normal);
+	const float ClosingSpeed = FMath::Abs(IntoSurface);
+	const FVector Sliding = RelativeVelocity - IntoSurface * Normal;
+	const float SlidingSpeed = Sliding.Size();
+
+	if (ClosingSpeed < MinImpactSpeed && SlidingSpeed < MinScrapeSpeed)
+	{
+		return;
+	}
+
 	LastSparkTime = Now;
 
-	const float Severity = FMath::Clamp(
+	const float ImpactSeverity = FMath::Clamp(
 		(ClosingSpeed - MinImpactSpeed) / FMath::Max(MaxImpactSpeed - MinImpactSpeed, 1.f), 0.f, 1.f);
+	const float ScrapeSeverity = FMath::Clamp(
+		(SlidingSpeed - MinScrapeSpeed) / FMath::Max(MaxScrapeSpeed - MinScrapeSpeed, 1.f), 0.f, 1.f);
 
-	SpawnSparks(Hit.ImpactPoint, Hit.ImpactNormal, Severity);
+	// Sparks are shed backwards along the slide and kicked out off the surface. With no slide -
+	// a square hit - that leaves the surface normal, which is what a head-on impact should throw.
+	FVector EmitDirection = Normal;
+
+	if (SlidingSpeed > KINDA_SMALL_NUMBER)
+	{
+		EmitDirection = (Normal * 0.5f - Sliding / SlidingSpeed).GetSafeNormal(1.e-4f, Normal);
+	}
+
+	SpawnSparks(Location, EmitDirection, FMath::Max(ImpactSeverity, ScrapeSeverity));
 }
 
 void UVehicleImpactFXComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
@@ -155,24 +173,20 @@ void UVehicleImpactFXComponent::TickComponent(float DeltaTime, ELevelTick TickTy
 
 void UVehicleImpactFXComponent::ReportImpactFromVelocity(const FVector& VelocityChange)
 {
-	// One frame of a collision, not the whole collision: this is a rate, so it is compared against
-	// the per-second thresholds after scaling by the pacing interval.
-	const float FrameSpeedLost = VelocityChange.Size();
+	const AActor* Owner = GetOwner();
 
 	FVector ContactLocation = FVector::ZeroVector;
 	FVector ContactNormal = FVector::ZeroVector;
 
 	// The impulse pushed the car along the change in velocity, so what it hit is the other way.
-	if (!FindContactPoint(-VelocityChange.GetSafeNormal(), ContactLocation, ContactNormal))
+	if (!Owner || !FindContactPoint(-VelocityChange.GetSafeNormal(), ContactLocation, ContactNormal))
 	{
 		return;
 	}
 
-	const float Severity = FMath::Clamp(
-		(FrameSpeedLost - MinImpactSpeed * ScrapeInterval)
-			/ FMath::Max((MaxImpactSpeed - MinImpactSpeed) * ScrapeInterval, 1.f), 0.f, 1.f);
-
-	SpawnSparks(ContactLocation, ContactNormal, Severity);
+	// No second body to subtract here, so this treats whatever was hit as stationary. That is
+	// right for a wall and understates a car-on-car brush, which the hit-event route covers better.
+	ReportContact(ContactLocation, ContactNormal, Owner->GetVelocity());
 }
 
 bool UVehicleImpactFXComponent::FindContactPoint(const FVector& PushDirection, FVector& OutLocation, FVector& OutNormal) const
