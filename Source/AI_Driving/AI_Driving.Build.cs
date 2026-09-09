@@ -17,6 +17,7 @@ public class AI_Driving : ModuleRules
 			"EnhancedInput",
 			"ChaosVehicles",
 			"PhysicsCore",
+			"Niagara",
 			"UMG",
 			"Slate",
 			"SlateCore",

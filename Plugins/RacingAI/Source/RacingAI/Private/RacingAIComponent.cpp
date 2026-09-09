@@ -233,7 +233,33 @@ float URacingAIComponent::ComputeSteering(const ARacingSpline& Track, float Delt
 	const float Speed = FMath::Abs(Progress.ForwardSpeed);
 
 	// 전방 주시 거리는 거리가 아니라 시간으로 잡습니다. 이래야 저속과 고속에서 모두 안정적입니다.
-	const float Lookahead = FMath::Clamp(Speed * P.LookaheadSeconds, P.MinLookahead, P.MaxLookahead);
+	float Lookahead = FMath::Clamp(Speed * P.LookaheadSeconds, P.MinLookahead, P.MaxLookahead);
+
+	// 코너에서는 그만큼 앞을 보면 안 됩니다. 목표점까지 직선으로 겨누기 때문에, 굽은 구간에서
+	// 멀리 보면 그 직선이 코스 안쪽을 가로질러 안쪽 벽을 향합니다. 목표점이 코스를 따라
+	// 몇 도나 돌아간 자리인지로 거리를 제한합니다. 호 길이 x 곡률이 곧 그 각도입니다.
+	if (P.MaxLookaheadAngleDegrees > 0.f)
+	{
+		float SharpestCurvature = 0.f;
+
+		// 볼 구간을 몇 군데 찍어 가장 굽은 곳을 씁니다. 진입부만 보면 코너 한가운데를 놓칩니다.
+		constexpr int32 CurvatureSamples = 4;
+
+		for (int32 Index = 1; Index <= CurvatureSamples; ++Index)
+		{
+			const float SampleDistance = Progress.DistanceAlongSpline
+				+ Lookahead * (static_cast<float>(Index) / CurvatureSamples);
+
+			SharpestCurvature = FMath::Max(SharpestCurvature, FMath::Abs(Track.GetCurvatureAtDistance(SampleDistance)));
+		}
+
+		if (SharpestCurvature > KINDA_SMALL_NUMBER)
+		{
+			const float AngleLimit = FMath::DegreesToRadians(P.MaxLookaheadAngleDegrees) / SharpestCurvature;
+
+			Lookahead = FMath::Max(P.MinLookahead, FMath::Min(Lookahead, AngleLimit));
+		}
+	}
 
 	const FVector TargetLocation = Track.GetOffsetLocationAtDistance(
 		Progress.DistanceAlongSpline + Lookahead, CurrentLaneOffset);

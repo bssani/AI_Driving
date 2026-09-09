@@ -6,11 +6,15 @@
 #include "RaceDirectorSubsystem.h"
 #include "RacingSpline.h"
 #include "RacingVehicleInput.h"
+#include "Components/PrimitiveComponent.h"
 
 URaceParticipantComponent::URaceParticipantComponent()
 {
-	// 진행도 갱신은 Director가 일괄 처리합니다. 컴포넌트 개별 틱은 필요 없습니다.
-	PrimaryComponentTick.bCanEverTick = false;
+	// 진행도 갱신은 Director가 일괄 처리합니다. 평소에는 틱이 필요 없고,
+	// 출발 전 잠금이 걸린 동안에만 켭니다.
+	PrimaryComponentTick.bCanEverTick = true;
+	PrimaryComponentTick.bStartWithTickEnabled = false;
+	PrimaryComponentTick.TickGroup = TG_PrePhysics;
 }
 
 void URaceParticipantComponent::BeginPlay()
@@ -78,7 +82,7 @@ void URaceParticipantComponent::SetInputLocked(bool bLocked)
 		return;
 	}
 
-	// 사람의 입력을 막습니다.
+	// 사람의 입력을 막습니다. 이것만으로는 폰에 바인딩된 조작만 끊깁니다.
 	if (APawn* Pawn = Cast<APawn>(Owner))
 	{
 		if (APlayerController* PC = Cast<APlayerController>(Pawn->GetController()))
@@ -86,42 +90,123 @@ void URaceParticipantComponent::SetInputLocked(bool bLocked)
 			if (bLocked)
 			{
 				Pawn->DisableInput(PC);
+
+				// 붙잡는 틱은 그 프레임의 입력이 처리된 뒤에 돌아야 합니다. 컨트롤러가
+				// 먼저 틱하도록 걸어 두면 순서가 프레임마다 흔들리지 않습니다.
+				PrimaryComponentTick.AddPrerequisite(PC, PC->PrimaryActorTick);
 			}
 			else
 			{
 				Pawn->EnableInput(PC);
+				PrimaryComponentTick.RemovePrerequisite(PC, PC->PrimaryActorTick);
 			}
 		}
 	}
 
-	// 입력만 막으면 경사에서 굴러갑니다. 차량이 인터페이스를 구현했다면 붙잡아 둡니다.
-	UObject* Target = nullptr;
-
-	if (Owner->GetClass()->ImplementsInterface(URacingVehicleInput::StaticClass()))
+	if (bLocked)
 	{
-		Target = Owner;
+		LockedTransform = Owner->GetActorTransform();
+		SetComponentTickEnabled(true);
+		HoldVehicleStill();
 	}
 	else
 	{
-		TArray<UActorComponent*> Components;
-		Owner->GetComponents(Components);
+		SetComponentTickEnabled(false);
 
-		for (UActorComponent* Component : Components)
+		if (UObject* Target = ResolveVehicleInputTarget())
 		{
-			if (Component && Component->GetClass()->ImplementsInterface(URacingVehicleInput::StaticClass()))
-			{
-				Target = Component;
-				break;
-			}
+			IRacingVehicleInput::Execute_ApplyBrake(Target, 0.f);
+		}
+	}
+}
+
+UObject* URaceParticipantComponent::ResolveVehicleInputTarget()
+{
+	if (VehicleInputTarget.IsValid())
+	{
+		return VehicleInputTarget.Get();
+	}
+
+	AActor* Owner = GetOwner();
+	if (!Owner)
+	{
+		return nullptr;
+	}
+
+	if (Owner->GetClass()->ImplementsInterface(URacingVehicleInput::StaticClass()))
+	{
+		VehicleInputTarget = Owner;
+
+		return Owner;
+	}
+
+	TArray<UActorComponent*> Components;
+	Owner->GetComponents(Components);
+
+	for (UActorComponent* Component : Components)
+	{
+		if (Component && Component->GetClass()->ImplementsInterface(URacingVehicleInput::StaticClass()))
+		{
+			VehicleInputTarget = Component;
+
+			return Component;
 		}
 	}
 
-	if (Target)
+	return nullptr;
+}
+
+void URaceParticipantComponent::HoldVehicleStill()
+{
+	AActor* Owner = GetOwner();
+	if (!Owner)
 	{
+		return;
+	}
+
+	// 인터페이스가 있으면 정식 경로로 눌러 둡니다. 엔진이 헛돌지 않아 소리도 맞습니다.
+	if (UObject* Target = ResolveVehicleInputTarget())
+	{
+		IRacingVehicleInput::Execute_ApplySteering(Target, 0.f);
 		IRacingVehicleInput::Execute_ApplyThrottle(Target, 0.f);
-		IRacingVehicleInput::Execute_ApplyBrake(Target, bLocked ? 1.f : 0.f);
+		IRacingVehicleInput::Execute_ApplyBrake(Target, 1.f);
+	}
+
+	// 그리고 물리를 직접 붙잡습니다. 인터페이스가 없는 차량도, 컨트롤러 쪽에 바인딩된
+	// 스티어링 휠도, 여기서는 예외가 없습니다.
+	UPrimitiveComponent* Root = Cast<UPrimitiveComponent>(Owner->GetRootComponent());
+
+	if (!Root || !Root->IsSimulatingPhysics())
+	{
+		return;
+	}
+
+	Root->SetPhysicsLinearVelocity(FVector::ZeroVector);
+	Root->SetPhysicsAngularVelocityInDegrees(FVector::ZeroVector);
+
+	// 속도를 눌러도 한 스텝 안에서는 조금씩 밀립니다. 쌓여서 출발선을 넘기 전에 되돌립니다.
+	const float Drift = FVector::Dist(Owner->GetActorLocation(), LockedTransform.GetLocation());
+
+	if (Drift > LockedDriftTolerance)
+	{
+		Owner->SetActorTransform(LockedTransform, false, nullptr, ETeleportType::TeleportPhysics);
 	}
 }
+
+void URaceParticipantComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
+{
+	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
+
+	if (bInputLocked)
+	{
+		HoldVehicleStill();
+	}
+	else
+	{
+		SetComponentTickEnabled(false);
+	}
+}
+
 
 int32 URaceParticipantComponent::RefreshProgress(const ARacingSpline& Track, float DeltaTime)
 {

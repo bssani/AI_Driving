@@ -106,9 +106,16 @@ public:
 	/**
 	 * 사람의 조작을 잠그거나 풉니다.
 	 *
-	 * 출발 신호 전에 플레이어가 먼저 튀어나가지 못하게 합니다. 입력 컴포넌트를 떼고,
-	 * 차량이 입력 인터페이스를 구현했다면 브레이크까지 걸어 둡니다. 경사진 그리드에서
-	 * 입력만 막으면 차가 굴러 내려가기 때문입니다.
+	 * 출발 신호 전에 플레이어가 먼저 튀어나가지 못하게 합니다.
+	 *
+	 * 폰의 입력을 끄는 것만으로는 부족합니다. APawn::DisableInput은 bInputEnabled를 내릴 뿐이고,
+	 * 엔진이 입력 스택을 세울 때 빠지는 것은 그 폰의 입력 컴포넌트 하나입니다
+	 * (APlayerController::BuildInputStack). 플레이어 컨트롤러 자신의 입력 컴포넌트와
+	 * EnableInput으로 밀어 넣은 컴포넌트는 그대로 남습니다. 그래서 스티어링 휠처럼
+	 * 컨트롤러 쪽에 바인딩된 조작은 잠금을 그냥 통과합니다.
+	 *
+	 * 그래서 잠긴 동안에는 매 틱 차량을 직접 붙잡습니다. 누가 어느 경로로 스로틀을 넣든
+	 * 결과가 같아집니다.
 	 *
 	 * AI에는 호출하지 않습니다. AI는 대기 상태가 따로 있습니다.
 	 */
@@ -118,9 +125,26 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Racing AI")
 	bool IsInputLocked() const { return bInputLocked; }
 
+	/**
+	 * 잠긴 차가 이만큼 (cm) 밀리면 제자리로 되돌립니다.
+	 *
+	 * 속도를 0으로 눌러도 물리는 한 스텝 안에서 조금씩 밀어냅니다. 카운트다운이 길면
+	 * 그 조금이 쌓여 출발선을 넘습니다.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Racing AI", meta = (ClampMin = "1.0", Units = "cm"))
+	float LockedDriftTolerance = 30.f;
+
+	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
+
 protected:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+
+	/** 잠긴 동안 차량을 붙잡아 둡니다 */
+	void HoldVehicleStill();
+
+	/** 소유 액터나 그 컴포넌트에서 IRacingVehicleInput 구현체를 찾습니다 */
+	UObject* ResolveVehicleInputTarget();
 
 	/** 직전 프레임의 스플라인 거리. 랩 판정에 씁니다 */
 	float PreviousDistance = 0.f;
@@ -130,4 +154,10 @@ protected:
 
 	/** 사람 조작이 잠겨 있는지 */
 	bool bInputLocked = false;
+
+	/** 잠근 순간의 위치. 밀려나면 여기로 되돌립니다 */
+	FTransform LockedTransform = FTransform::Identity;
+
+	/** 매 틱 다시 찾지 않기 위해 캐시합니다 */
+	TWeakObjectPtr<UObject> VehicleInputTarget;
 };

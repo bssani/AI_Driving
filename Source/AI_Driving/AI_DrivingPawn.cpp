@@ -20,6 +20,7 @@
 #include "Engine/SkeletalMesh.h"
 #include "UObject/ConstructorHelpers.h"
 #include "VRHandPresenceComponent.h"
+#include "VehicleImpactFXComponent.h"
 #include "Components/PoseableMeshComponent.h"
 
 #if WITH_VEHICLE_SOUND
@@ -166,6 +167,10 @@ AAI_DrivingPawn::AAI_DrivingPawn()
 #if WITH_VEHICLE_SOUND
 	VehicleSound = CreateDefaultSubobject<UVehicleSoundComponent>(TEXT("Vehicle Sound"));
 #endif
+
+	// sparks on contact. Finding the contact point is its own problem here: async substepping
+	// means no hit events reach the game thread, so it looks for the surface itself.
+	ImpactFX = CreateDefaultSubobject<UVehicleImpactFXComponent>(TEXT("Impact FX"));
 
 	// construct the hand swapper and point it at what it drives
 	HandPresence = CreateDefaultSubobject<UVRHandPresenceComponent>(TEXT("VR Hand Presence"));

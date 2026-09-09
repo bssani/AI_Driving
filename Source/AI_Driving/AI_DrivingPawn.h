@@ -16,6 +16,7 @@ class UVRHandPresenceComponent;
 class UPoseableMeshComponent;
 class UVehicleSoundComponent;
 class UChaosWheeledVehicleMovementComponent;
+class UVehicleImpactFXComponent;
 struct FInputActionValue;
 
 /**
@@ -85,6 +86,10 @@ class AAI_DrivingPawn : public AWheeledVehiclePawn
 	/** Decides which hand representation the driver sees, and turns the wheel */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category ="Components", meta = (AllowPrivateAccess = "true"))
 	UVRHandPresenceComponent* HandPresence;
+
+	/** Sparks where the car hits things. Assign a Niagara system on it to see anything */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category ="Components", meta = (AllowPrivateAccess = "true"))
+	UVehicleImpactFXComponent* ImpactFX;
 
 	/** Cast pointer to the Chaos Vehicle movement component */
 	TObjectPtr<UChaosWheeledVehicleMovementComponent> ChaosVehicleMovement;
