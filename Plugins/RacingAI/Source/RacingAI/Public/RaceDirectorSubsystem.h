@@ -160,6 +160,47 @@ public:
 	void AbortRace();
 
 	/**
+	 * 레이스를 지금 끝내고 모두를 멈춰 세웁니다.
+	 *
+	 * 결승선이나 정지선에 닿지 않았어도 됩니다. 트랙이 길어 중간에서 끝내고 싶을 때, 트리거 볼륨이나
+	 * 운영자 키에서 이 함수 하나를 부르면 됩니다. 아직 완주하지 못한 참가자는 지금 진행도 순으로
+	 * 등수를 받고 bDidNotFinish가 켜집니다.
+	 *
+	 * 모두 FinishStopDeceleration으로 감속해 선 다음 그 자리에 붙잡힙니다. AbortRace와 달리
+	 * 그리드로 되돌리지 않습니다. 다음 판은 ResetRace나 RestartRace로 시작합니다.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Racing AI|Race")
+	void StopRace();
+
+	/**
+	 * 레이스가 끝나는 선을 월드 위치로 정합니다. 가장 가까운 트랙 지점으로 옮겨 씁니다.
+	 *
+	 * 정해 두면 랩 대신 이 선을 지나는 순간 완주입니다. TotalLaps가 1이면 출발 후 처음 지날 때,
+	 * 2면 두 번째로 지날 때입니다. 0이면 1로 봅니다. 트랙이 길어 한 바퀴를 다 돌지 않고
+	 * 중간에서 끝내려는 용도입니다. 출발 그리드보다 앞쪽에 두세요.
+	 *
+	 * 레벨에 아무 액터나 하나 놓고 그 위치를 넘기면 됩니다. 스포너의 Stop Line Marker에 지정하면
+	 * 그리드를 세울 때 알아서 부릅니다.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Racing AI|Race")
+	void SetStopLineAtLocation(const FVector& WorldLocation);
+
+	/** 레이스가 끝나는 선을 스플라인 거리(cm)로 정합니다 */
+	UFUNCTION(BlueprintCallable, Category = "Racing AI|Race")
+	void SetStopLineDistance(float SplineDistance);
+
+	/** 정지선을 지웁니다. 다시 랩으로 완주를 판정합니다 */
+	UFUNCTION(BlueprintCallable, Category = "Racing AI|Race")
+	void ClearStopLine();
+
+	UFUNCTION(BlueprintPure, Category = "Racing AI|Race")
+	bool HasStopLine() const { return bHasStopLine; }
+
+	/** 정지선의 스플라인 거리 (cm). 정지선이 없으면 의미 없는 값입니다 */
+	UFUNCTION(BlueprintPure, Category = "Racing AI|Race")
+	float GetStopLineDistance() const { return StopLineDistance; }
+
+	/**
 	 * 모든 참가자를 그리드로 되돌리고 기록을 초기화합니다.
 	 *
 	 * 레벨을 다시 로드하지 않고 다음 세션을 시작할 수 있게 하는 함수입니다.
@@ -290,9 +331,34 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Racing AI|Race", meta = (ClampMin = "0.0", Units = "s"))
 	float RaceTimeLimitSeconds = 0.f;
 
-	/** 완주한 AI를 서서히 멈춥니다. 끄면 계속 주행합니다 */
+	/**
+	 * 완주한 AI를 그 자리에서 서서히 멈춥니다. 끄면 계속 주행합니다.
+	 *
+	 * bStopEveryoneWhenRaceEnds가 켜져 있으면 쓰이지 않습니다. 그때는 레이스가 끝날 때 모두 함께 섭니다.
+	 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Racing AI|Race")
 	bool bStopAIAfterFinish = true;
+
+	/**
+	 * 레이스가 끝나면 AI와 플레이어를 모두 서서히 세우고 그 자리에 붙잡아 둡니다.
+	 *
+	 * 출발 전처럼 끝난 뒤에도 아무도 움직이지 않게 합니다. 모두 같은 감속으로 서므로 앞뒤 간격이
+	 * 유지되어 서로 받지 않습니다.
+	 *
+	 * 켜 두면 먼저 완주한 AI도 레이스가 끝날 때까지 계속 달립니다. 먼저 들어온 차가 결승선 바로
+	 * 뒤에서 서 버리면, 아직 달리는 플레이어가 그 차를 들이받기 때문입니다.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Racing AI|Race")
+	bool bStopEveryoneWhenRaceEnds = true;
+
+	/**
+	 * 레이스가 끝났을 때 세우는 감속도 (cm/s^2).
+	 *
+	 * 600이면 약 0.6 G로, 시속 150 km에서 7초 동안 약 145 m를 달리며 섭니다. VR에서는 너무 세게
+	 * 두지 마세요. 차가 서는 자리는 정지선에서 이 거리만큼 앞입니다.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Racing AI|Race", meta = (ClampMin = "100.0"))
+	float FinishStopDeceleration = 600.f;
 
 	/**
 	 * 화면 상태 표시에 덧붙일 조작 안내입니다.
@@ -330,6 +396,9 @@ private:
 	/** 레이스를 종료 상태로 만듭니다 */
 	void ConcludeRace();
 
+	/** AI는 완주 상태로, 사람은 서서히 세운 뒤 붙잡기로 넘깁니다 */
+	void BringEveryoneToStop();
+
 	/** 카운트다운 타이머 콜백 */
 	void TickCountdown();
 
@@ -359,4 +428,8 @@ private:
 	FTimerHandle CountdownTimer;
 
 	bool bTrackResolved = false;
+
+	/** 정지선. 켜져 있으면 랩 대신 이 스플라인 거리를 지나는 순간 완주입니다 */
+	bool bHasStopLine = false;
+	float StopLineDistance = 0.f;
 };

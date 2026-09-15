@@ -179,6 +179,24 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Director")
 	bool bEndRaceWhenPlayerFinishes = true;
 
+	/**
+	 * 레이스가 끝나는 자리에 놓아 둔 액터입니다. 비워 두면 랩으로 완주를 판정합니다.
+	 *
+	 * 트랙이 길어 한 바퀴를 다 돌지 않고 중간에서 끝내려면, 레벨에 Target Point 같은 액터를 하나
+	 * 놓고 여기에 지정하세요. 가장 가까운 트랙 지점이 정지선이 됩니다. Total Laps가 1이면 출발 후
+	 * 처음 그 선을 지나는 순간 완주입니다. bDrawDebug를 켜면 빨간 STOP 선으로 보입니다.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Director")
+	TObjectPtr<AActor> StopLineMarker = nullptr;
+
+	/** 레이스가 끝나면 AI와 플레이어를 모두 서서히 세우고 그 자리에 붙잡아 둡니다 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Director")
+	bool bStopEveryoneWhenRaceEnds = true;
+
+	/** 레이스가 끝났을 때 세우는 감속도 (cm/s^2). 600이면 시속 150 km에서 약 145 m를 달려 섭니다 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Director", meta = (ClampMin = "100.0", EditCondition = "bStopEveryoneWhenRaceEnds"))
+	float FinishStopDeceleration = 600.f;
+
 	//--------------------------------------------------------------------------
 	// 조작 키
 	//

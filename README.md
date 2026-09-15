@@ -28,10 +28,19 @@ DIFA / Family Day 행사에서 보여줄 VR 레이싱 데모의 검증용 프로
 에디터에서 **Play 드롭다운 → VR Preview**. 패키지 빌드는 `bStartInVR=True`라 헤드셋이
 붙어 있으면 스테레오로, 없으면 평면으로 뜬다.
 
-리센터는 차량 리셋(`R`)에 딸려 있다. `ResetVehicle`이 끝에 `DoRecenterVR`을 부르므로 시야는
-돌아오지만, 차가 들려 올라가고 속도가 0이 된다. 주행 중에 시야만 바로잡을 방법은 아직 없다.
-전용 바인딩은 폰에 있으나 `IA_Reset_VR`을 가리키고 있고, 그 액션이 든 `IMC_Vehicle_VR`은
-등록되지 않으므로 닿지 않는다.
+키는 `IMC_Vehicle_Default` 에셋에서 직접 읽어 확인했다(2026-09-15). 이전에 이 자리에 적혀 있던
+"리센터는 R 차량 리셋에 딸려 있다"는 틀렸다.
+
+| 키 | 동작 |
+|---|---|
+| `R` | VR 시야만 리센터 (`IA_Reset_VR`). 차는 그대로 둔다 |
+| `Backspace`, 게임패드 메뉴 버튼 | 차량 리셋 (`IA_Reset`). 레이스 트랙 위라면 가장 가까운 트랙 지점으로 옮기고, 끝에 리센터도 한다 |
+
+블루프린트에서는 폰의 `Do Recenter VR`과 `Do Reset Vehicle`을 부르면 된다. 다른 폰이라면 엔진 노드
+`Reset Orientation and Position`(Yaw 0)이 같은 일을 한다.
+
+그리드 스포너의 재시작 키는 `End`다. 예전 기본값이 `Backspace`여서 차량 리셋과 겹쳤고, 달리는 중에
+리셋을 누르면 레이스까지 처음부터 다시 시작됐다.
 
 ## 시험용 트랙
 
@@ -59,8 +68,9 @@ racing.Calibrate 0      -- 결과와 세 프로파일 권장값 출력
 **측정 전에 에디터를 앞으로 꺼낼 것.** 백그라운드에서는 3fps로 돌아 값이 무의미해진다.
 스크립트로 폴링하면서 재도 안 된다. 폴링이 프레임 시간을 부풀린다.
 
-속도·난이도·차량 교체·색상을 어디서 어떻게 바꾸는지는 [Docs/Tuning.md](Docs/Tuning.md)에
-따로 정리해 두었다.
+속도·차량 교체·색상은 [Docs/Tuning.md](Docs/Tuning.md), AI 난이도와 코너 조정은
+[Docs/AI_Difficulty.md](Docs/AI_Difficulty.md)에 정리해 두었다. AI가 어떻게 길을 따라가고 다른 차를
+알아채는지는 [Docs/AI_HowItDrives.md](Docs/AI_HowItDrives.md)에 쉬운 말로 풀어 두었다.
 
 ## VR에서 주의할 것
 
@@ -172,9 +182,6 @@ Quest 2, 눈당 2080×2096(합계 8.7 MPix) 기준. 플랫 PIE에서 같은 픽�
   머리에 붙어야 하므로 Play Sound **2D**로 재생한다
 - **성능.** 위 표 참고. 목표 기계가 정해지면 다시 측정한다
 - **멀미 완화.** 미착수. 차체 롤 감쇠와 리센터 페이드가 후보
-- **주행 중 시야만 바로잡을 수단.** 지금은 차량 리셋(`R`)에 딸려 있어 차가 멈춘다. 전용
-  `IA_RecenterVR`을 만들어 `IMC_Vehicle_Default`에 매핑하고 폰의 `RecenterVRAction`에
-  물리면 된다. C++ 쪽은 준비되어 있다
 - **스파크 모양 다듬기.** `Content/VehicleFX/NS_ImpactSparks`가 붙어 있고 접촉 지점에서
   터지는 것까지 확인했지만, 엔진 템플릿(`DirectionalBurst`)을 그대로 복제한 것이라 아직
   하얀 스프라이트 뭉치다. 나이아가라 에디터에서 손볼 곳은 넷이다. 스프라이트 렌더러의

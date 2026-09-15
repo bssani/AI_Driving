@@ -17,6 +17,7 @@ class UPoseableMeshComponent;
 class UVehicleSoundComponent;
 class UChaosWheeledVehicleMovementComponent;
 class UVehicleImpactFXComponent;
+class UChaosBrakeReverseGuardComponent;
 struct FInputActionValue;
 
 /**
@@ -90,6 +91,11 @@ class AAI_DrivingPawn : public AWheeledVehiclePawn
 	/** Sparks where the car hits things. Assign a Niagara system on it to see anything */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category ="Components", meta = (AllowPrivateAccess = "true"))
 	UVehicleImpactFXComponent* ImpactFX;
+
+	/** Keeps the brake from selecting reverse while the car is still moving. Otherwise braking at
+	 *  speed spins the engine through the reverse ratio and the engine note shoots up */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category ="Components", meta = (AllowPrivateAccess = "true"))
+	UChaosBrakeReverseGuardComponent* BrakeReverseGuard;
 
 	/** Cast pointer to the Chaos Vehicle movement component */
 	TObjectPtr<UChaosWheeledVehicleMovementComponent> ChaosVehicleMovement;
@@ -254,7 +260,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Input")
 	void DoToggleCamera();
 
-	/** Handle reset vehicle input by input actions or mobile interface */
+	/** Handle reset vehicle input by input actions or mobile interface. On a race track this puts
+	 *  the car back onto the nearest point of the track; elsewhere it rights the car where it sits.
+	 *  Either way the VR view is recentered */
 	UFUNCTION(BlueprintCallable, Category="Input")
 	void DoResetVehicle();
 

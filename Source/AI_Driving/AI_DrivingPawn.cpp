@@ -21,6 +21,10 @@
 #include "UObject/ConstructorHelpers.h"
 #include "VRHandPresenceComponent.h"
 #include "VehicleImpactFXComponent.h"
+#include "ChaosBrakeReverseGuardComponent.h"
+#include "RaceParticipantComponent.h"
+#include "GameFramework/PlayerController.h"
+#include "Camera/PlayerCameraManager.h"
 #include "Components/PoseableMeshComponent.h"
 
 #if WITH_VEHICLE_SOUND
@@ -171,6 +175,10 @@ AAI_DrivingPawn::AAI_DrivingPawn()
 	// sparks on contact. Finding the contact point is its own problem here: async substepping
 	// means no hit events reach the game thread, so it looks for the surface itself.
 	ImpactFX = CreateDefaultSubobject<UVehicleImpactFXComponent>(TEXT("Impact FX"));
+
+	// braking at speed must not drop the gearbox into reverse. It turns itself off on cars nobody
+	// is driving, since the AI holds the brake at the grid and would otherwise roll backwards
+	BrakeReverseGuard = CreateDefaultSubobject<UChaosBrakeReverseGuardComponent>(TEXT("Brake Reverse Guard"));
 
 	// construct the hand swapper and point it at what it drives
 	HandPresence = CreateDefaultSubobject<UVRHandPresenceComponent>(TEXT("VR Hand Presence"));
@@ -496,6 +504,34 @@ void AAI_DrivingPawn::DoToggleCamera()
 
 void AAI_DrivingPawn::DoResetVehicle()
 {
+	// on a race track, put the car back on the track. Righting a car where it sits leaves a car
+	// wedged against a barrier still wedged against the barrier
+	if (URaceParticipantComponent* Participant = FindComponentByClass<URaceParticipantComponent>())
+	{
+		// holding on the grid before the start: moving the car would break the grid, but the
+		// driver can still straighten their view
+		if (Participant->IsInputLocked())
+		{
+			DoRecenterVR();
+			return;
+		}
+
+		if (Participant->RespawnOnTrack())
+		{
+			// the car jumps in an instant. Starting black and fading in hides the jump from the driver
+			if (APlayerController* PC = Cast<APlayerController>(GetController()))
+			{
+				if (PC->PlayerCameraManager)
+				{
+					PC->PlayerCameraManager->StartCameraFade(1.0f, 0.0f, 0.4f, FLinearColor::Black, false, false);
+				}
+			}
+
+			DoRecenterVR();
+			return;
+		}
+	}
+
 	// reset to a location slightly above our current one
 	FVector ResetLocation = GetActorLocation() + FVector(0.0f, 0.0f, 50.0f);
 

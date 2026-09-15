@@ -310,6 +310,11 @@ void URaceDirectorSubsystem::StartRace()
 	UE_LOG(LogRacingAI, Log, TEXT("레이스 시작. 참가자 %d명 (AI %d대), 목표 랩 %d"),
 		Participants.Num(), AIComponents.Num(), TotalLaps);
 
+	if (bHasStopLine)
+	{
+		UE_LOG(LogRacingAI, Log, TEXT("정지선 %.0fcm를 %d번째로 지나면 완주입니다."), StopLineDistance, FMath::Max(1, TotalLaps));
+	}
+
 	OnRaceStarted.Broadcast();
 }
 
@@ -330,6 +335,93 @@ void URaceDirectorSubsystem::AbortRace()
 	HoldAtGrid();
 
 	UE_LOG(LogRacingAI, Log, TEXT("레이스 중단"));
+}
+
+void URaceDirectorSubsystem::StopRace()
+{
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(CountdownTimer);
+	}
+
+	switch (RaceState)
+	{
+	case ERaceState::Racing:
+		UE_LOG(LogRacingAI, Log, TEXT("레이스를 지금 종료하고 모두 세웁니다."));
+
+		ConcludeRace();
+
+		// 부른 쪽은 멈추기를 원한 것이므로, 레이스 종료 시 세우는 옵션을 꺼 두었어도 세웁니다.
+		if (!bStopEveryoneWhenRaceEnds)
+		{
+			BringEveryoneToStop();
+		}
+		break;
+
+	case ERaceState::Finished:
+		BringEveryoneToStop();
+		break;
+
+	case ERaceState::Countdown:
+		// 아직 아무도 출발하지 않았습니다. 카운트다운만 거두고 그리드에 그대로 둡니다.
+		RaceState = ERaceState::Idle;
+		HoldAtGrid();
+		break;
+
+	default:
+		break;
+	}
+}
+
+void URaceDirectorSubsystem::BringEveryoneToStop()
+{
+	for (const TObjectPtr<URaceParticipantComponent>& Participant : Participants)
+	{
+		if (!Participant)
+		{
+			continue;
+		}
+
+		if (URacingAIComponent* AI = Cast<URacingAIComponent>(Participant))
+		{
+			AI->EnterFinished(FinishStopDeceleration);
+		}
+		else
+		{
+			Participant->StopAndHold(FinishStopDeceleration);
+		}
+	}
+}
+
+void URaceDirectorSubsystem::SetStopLineAtLocation(const FVector& WorldLocation)
+{
+	ARacingSpline* FoundTrack = GetTrack();
+
+	if (!FoundTrack)
+	{
+		UE_LOG(LogRacingAI, Warning, TEXT("트랙이 없어 정지선을 정하지 못했습니다."));
+
+		return;
+	}
+
+	SetStopLineDistance(FoundTrack->FindDistanceAtLocation(WorldLocation));
+}
+
+void URaceDirectorSubsystem::SetStopLineDistance(float SplineDistance)
+{
+	const ARacingSpline* FoundTrack = GetTrack();
+	const float Length = FoundTrack ? FoundTrack->GetLength() : 0.f;
+
+	bHasStopLine = true;
+	StopLineDistance = Length > 0.f ? FMath::Clamp(SplineDistance, 0.f, Length) : SplineDistance;
+
+	UE_LOG(LogRacingAI, Log, TEXT("정지선: 스플라인 %.0fcm. 이 선을 지나면 완주입니다."), StopLineDistance);
+}
+
+void URaceDirectorSubsystem::ClearStopLine()
+{
+	bHasStopLine = false;
+	StopLineDistance = 0.f;
 }
 
 void URaceDirectorSubsystem::ConcludeRace()
@@ -353,7 +445,12 @@ void URaceDirectorSubsystem::ConcludeRace()
 		}
 	}
 
-	if (bStopAIAfterFinish)
+	// 끝났으면 출발 전처럼 아무도 움직이지 않게 합니다. 모두 같은 감속으로 서므로 서로 받지 않습니다.
+	if (bStopEveryoneWhenRaceEnds)
+	{
+		BringEveryoneToStop();
+	}
+	else if (bStopAIAfterFinish)
 	{
 		for (const TObjectPtr<URacingAIComponent>& AI : AIComponents)
 		{
@@ -518,13 +615,31 @@ void URaceDirectorSubsystem::UpdateProgressAndPositions(float DeltaTime)
 
 void URaceDirectorSubsystem::CheckForFinishers()
 {
-	if (RaceState != ERaceState::Racing || TotalLaps <= 0)
+	if (RaceState != ERaceState::Racing || !Track || (TotalLaps <= 0 && !bHasStopLine))
 	{
 		return;
 	}
 
 	bool bPlayerFinished = false;
-	const bool bClosedCircuit = Track && Track->IsClosed();
+	const bool bClosedCircuit = Track->IsClosed();
+
+	// 정지선이 있으면 랩 대신 그 선까지의 누적 거리로 봅니다. 누적 거리는 결승선을 원점으로
+	// 재므로, 정지선도 결승선에서부터 잰 거리로 바꿔 둡니다.
+	float StopLineTotalDistance = 0.f;
+
+	if (bHasStopLine)
+	{
+		const float Length = Track->GetLength();
+		float FromFinish = Track->GetDistanceFromFinishLine(StopLineDistance);
+
+		// 결승선과 같은 자리면 0이 되어 출발하자마자 완주로 잡힙니다. 그때는 한 바퀴를 뜻한다고 봅니다.
+		if (bClosedCircuit && FromFinish < 1.f)
+		{
+			FromFinish = Length;
+		}
+
+		StopLineTotalDistance = (bClosedCircuit ? (FMath::Max(1, TotalLaps) - 1) * Length : 0.f) + FromFinish;
+	}
 
 	for (const TObjectPtr<URaceParticipantComponent>& Participant : Participants)
 	{
@@ -535,9 +650,18 @@ void URaceDirectorSubsystem::CheckForFinishers()
 
 		// 닫힌 서킷은 정해진 랩을 채우면 완주입니다. 열린 코스(스프린트)는 랩이라는
 		// 개념이 없으므로 결승선을 통과했는지만 봅니다.
-		const bool bReachedFinish = bClosedCircuit
-			? Participant->Progress.Lap >= TotalLaps
-			: Participant->Progress.LapDistance >= 0.f;
+		bool bReachedFinish = false;
+
+		if (bHasStopLine)
+		{
+			bReachedFinish = Participant->Progress.TotalDistance >= StopLineTotalDistance;
+		}
+		else
+		{
+			bReachedFinish = bClosedCircuit
+				? Participant->Progress.Lap >= TotalLaps
+				: Participant->Progress.LapDistance >= 0.f;
+		}
 
 		if (!bReachedFinish)
 		{
@@ -547,7 +671,9 @@ void URaceDirectorSubsystem::CheckForFinishers()
 		++FinishedCount;
 		Participant->MarkFinished(FinishedCount, GetRaceElapsedSeconds());
 
-		if (bStopAIAfterFinish)
+		// 먼저 들어온 AI를 그 자리에서 세우면 아직 달리는 차들이 들이받습니다. 모두 함께 세우는
+		// 옵션이 켜져 있으면 레이스가 끝날 때까지 계속 달리게 둡니다.
+		if (bStopAIAfterFinish && !bStopEveryoneWhenRaceEnds)
 		{
 			if (URacingAIComponent* AI = Cast<URacingAIComponent>(Participant))
 			{
@@ -858,6 +984,16 @@ void URaceDirectorSubsystem::DrawDebug() const
 
 		DrawDebugLine(World, Center - Right, Center + Right, FColor::White, false, -1.f, 0, 18.f);
 		DrawDebugString(World, Center + FVector(0.f, 0.f, 260.f), TEXT("FINISH"), nullptr, FColor::White, 0.f, true, 1.6f);
+	}
+
+	// 정지선. 여기를 지나면 완주이고, 모두 이 앞으로 감속하며 섭니다.
+	if (bHasStopLine)
+	{
+		const FVector Center = Track->GetLocationAtDistance(StopLineDistance) + FVector(0.f, 0.f, 20.f);
+		const FVector Right = Track->GetRightAtDistance(StopLineDistance) * Track->TrackHalfWidth;
+
+		DrawDebugLine(World, Center - Right, Center + Right, FColor::Red, false, -1.f, 0, 18.f);
+		DrawDebugString(World, Center + FVector(0.f, 0.f, 260.f), TEXT("STOP"), nullptr, FColor::Red, 0.f, true, 1.6f);
 	}
 
 	for (const TObjectPtr<URacingAIComponent>& AI : AIComponents)

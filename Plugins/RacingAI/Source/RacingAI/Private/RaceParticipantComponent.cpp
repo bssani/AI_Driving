@@ -7,6 +7,8 @@
 #include "RacingSpline.h"
 #include "RacingVehicleInput.h"
 #include "Components/PrimitiveComponent.h"
+#include "Engine/World.h"
+#include "RacingAIModule.h"
 
 URaceParticipantComponent::URaceParticipantComponent()
 {
@@ -29,6 +31,23 @@ void URaceParticipantComponent::BeginPlay()
 
 void URaceParticipantComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	const AActor* Owner = GetOwner();
+
+	UE_LOG(LogRacingAI, Log, TEXT("%s: 레이스 참가자 해제 (%s)"),
+		*GetNameSafe(Owner), *UEnum::GetValueAsString(EndPlayReason));
+
+	// 차는 남아 있는데 참가자만 사라지면 레이스가 그 차를 잊습니다. 순위도, 완주도, 끝났을 때
+	// 세우기도 그 차에는 더 이상 닿지 않는데 아무 오류도 나지 않습니다. 원인을 찾을 수 있게 남깁니다.
+	if (EndPlayReason == EEndPlayReason::Destroyed && Owner && !Owner->IsActorBeingDestroyed())
+	{
+		UE_LOG(LogRacingAI, Warning, TEXT("%s: 차는 남아 있는데 레이스 참가자 컴포넌트가 파괴됩니다. 이 차는 이제 레이스에서 빠집니다."),
+			*GetNameSafe(Owner));
+
+#if !UE_BUILD_SHIPPING
+		FDebug::DumpStackTraceToLog(ELogVerbosity::Warning);
+#endif
+	}
+
 	if (URaceDirectorSubsystem* Director = URaceDirectorSubsystem::Get(this))
 	{
 		Director->UnregisterParticipant(this);
@@ -69,6 +88,10 @@ void URaceParticipantComponent::MarkDidNotFinish(int32 InFinishPosition)
 
 void URaceParticipantComponent::SetInputLocked(bool bLocked)
 {
+	// 잠그든 풀든, 세우던 중이었다면 그 일은 여기서 끝납니다. 잠그면 붙잡기로 넘어가고
+	// 풀면 다음 레이스가 시작된 것입니다.
+	bStopping = false;
+
 	if (bInputLocked == bLocked)
 	{
 		return;
@@ -90,18 +113,15 @@ void URaceParticipantComponent::SetInputLocked(bool bLocked)
 			if (bLocked)
 			{
 				Pawn->DisableInput(PC);
-
-				// 붙잡는 틱은 그 프레임의 입력이 처리된 뒤에 돌아야 합니다. 컨트롤러가
-				// 먼저 틱하도록 걸어 두면 순서가 프레임마다 흔들리지 않습니다.
-				PrimaryComponentTick.AddPrerequisite(PC, PC->PrimaryActorTick);
 			}
 			else
 			{
 				Pawn->EnableInput(PC);
-				PrimaryComponentTick.RemovePrerequisite(PC, PC->PrimaryActorTick);
 			}
 		}
 	}
+
+	SetControllerTickPrerequisite(bLocked);
 
 	if (bLocked)
 	{
@@ -211,12 +231,201 @@ void URaceParticipantComponent::TickComponent(float DeltaTime, ELevelTick TickTy
 	{
 		HoldVehicleStill();
 	}
+	else if (bStopping)
+	{
+		UpdateStopping(DeltaTime);
+	}
 	else
 	{
+		SetControllerTickPrerequisite(false);
 		SetComponentTickEnabled(false);
 	}
 }
 
+void URaceParticipantComponent::SetControllerTickPrerequisite(bool bEnable)
+{
+	const APawn* Pawn = Cast<APawn>(GetOwner());
+	APlayerController* PC = Pawn ? Cast<APlayerController>(Pawn->GetController()) : nullptr;
+
+	if (!PC)
+	{
+		return;
+	}
+
+	// 붙잡는 틱은 그 프레임의 입력이 처리된 뒤에 돌아야 합니다. 컨트롤러가
+	// 먼저 틱하도록 걸어 두면 순서가 프레임마다 흔들리지 않습니다.
+	if (bEnable)
+	{
+		PrimaryComponentTick.AddPrerequisite(PC, PC->PrimaryActorTick);
+	}
+	else
+	{
+		PrimaryComponentTick.RemovePrerequisite(PC, PC->PrimaryActorTick);
+	}
+}
+
+//------------------------------------------------------------------------------
+// 레이스 종료 정지
+//------------------------------------------------------------------------------
+
+void URaceParticipantComponent::StopAndHold(float Deceleration)
+{
+	const AActor* Owner = GetOwner();
+
+	if (!Owner || bInputLocked)
+	{
+		return;
+	}
+
+	StoppingDeceleration = FMath::Max(1.f, Deceleration);
+
+	// 이미 세우는 중이면 감속도만 바꿉니다. 허용 속도를 지금 속도로 되돌리면 서다 말고 다시 풀립니다.
+	if (bStopping)
+	{
+		return;
+	}
+
+	UPrimitiveComponent* Root = Cast<UPrimitiveComponent>(Owner->GetRootComponent());
+	const FVector Velocity = Root && Root->IsSimulatingPhysics() ? Root->GetPhysicsLinearVelocity() : Owner->GetVelocity();
+
+	bStopping = true;
+	StoppingAllowedSpeed = static_cast<float>(FVector(Velocity.X, Velocity.Y, 0.f).Size());
+
+	SetControllerTickPrerequisite(true);
+	SetComponentTickEnabled(true);
+}
+
+void URaceParticipantComponent::UpdateStopping(float DeltaTime)
+{
+	AActor* Owner = GetOwner();
+	if (!Owner)
+	{
+		return;
+	}
+
+	// 이 속도 아래로 떨어지면 붙잡기로 넘어갑니다. 그때 속도를 0으로 눌러도 느껴지지 않을 만큼 느립니다.
+	constexpr float HoldBelowSpeed = 50.f;
+
+	StoppingAllowedSpeed = FMath::Max(0.f, StoppingAllowedSpeed - StoppingDeceleration * DeltaTime);
+
+	// 인터페이스가 있으면 스로틀도 놓게 합니다. 엔진이 헛돌며 우는 소리가 나지 않습니다.
+	if (UObject* Target = ResolveVehicleInputTarget())
+	{
+		IRacingVehicleInput::Execute_ApplyThrottle(Target, 0.f);
+	}
+
+	// 속도의 크기만 누릅니다. 방향도 회전도 그대로 두므로 핸들은 계속 먹습니다.
+	if (UPrimitiveComponent* Root = Cast<UPrimitiveComponent>(Owner->GetRootComponent()))
+	{
+		if (Root->IsSimulatingPhysics())
+		{
+			const FVector Velocity = Root->GetPhysicsLinearVelocity();
+			const FVector Flat(Velocity.X, Velocity.Y, 0.f);
+			const double Speed = Flat.Size();
+
+			if (Speed > StoppingAllowedSpeed && Speed > KINDA_SMALL_NUMBER)
+			{
+				const FVector Capped = Flat * (StoppingAllowedSpeed / Speed);
+
+				Root->SetPhysicsLinearVelocity(FVector(Capped.X, Capped.Y, Velocity.Z));
+			}
+		}
+	}
+
+	if (StoppingAllowedSpeed <= HoldBelowSpeed)
+	{
+		SetInputLocked(true);
+	}
+}
+
+//------------------------------------------------------------------------------
+// 트랙 위로 되돌리기
+//------------------------------------------------------------------------------
+
+bool URaceParticipantComponent::RespawnOnTrack()
+{
+	// 출발 전에는 옮기지 않습니다. 그리드를 흐트러뜨리면 출발 순서가 엉킵니다.
+	if (bInputLocked)
+	{
+		return false;
+	}
+
+	const AActor* Owner = GetOwner();
+	URaceDirectorSubsystem* Director = URaceDirectorSubsystem::Get(this);
+	ARacingSpline* Track = Director ? Director->GetTrack() : nullptr;
+
+	if (!Owner || !Track)
+	{
+		UE_LOG(LogRacingAI, Warning, TEXT("%s: 트랙을 찾지 못해 트랙 위로 옮기지 못했습니다."), *GetNameSafe(Owner));
+
+		return false;
+	}
+
+	const FVector Location = Owner->GetActorLocation();
+	const float Distance = Track->FindDistanceAtLocation(Location);
+
+	// 원래 있던 쪽은 유지하되 벽에서 떼어 놓습니다. 벽 옆에 그대로 놓으면 곧바로 또 박습니다.
+	const float Limit = Track->TrackHalfWidth * RespawnLaneFraction;
+	const float Lateral = FMath::Clamp(Track->GetLateralOffsetAtLocation(Location), -Limit, Limit);
+
+	if (!PlaceOnTrack(*Track, Distance, Lateral))
+	{
+		return false;
+	}
+
+	UE_LOG(LogRacingAI, Log, TEXT("%s: 트랙 위로 옮겼습니다. 스플라인 %.0fcm, 좌우 %.0fcm"),
+		*GetNameSafe(Owner), Distance, Lateral);
+
+	return true;
+}
+
+bool URaceParticipantComponent::PlaceOnTrack(const ARacingSpline& Track, float SplineDistance, float LateralOffset)
+{
+	AActor* Owner = GetOwner();
+	UWorld* World = GetWorld();
+
+	if (!Owner || !World)
+	{
+		return false;
+	}
+
+	const FVector OnTrack = Track.GetOffsetLocationAtDistance(SplineDistance, LateralOffset);
+	const FRotator Facing = Track.GetDirectionAtDistance(SplineDistance).Rotation();
+
+	// 바퀴 바닥이 액터 원점보다 얼마나 아래 있는지는 차마다 다릅니다. 원점을 노면에서 고정 높이에
+	// 두면 원점이 높은 차는 바퀴가 노면에 박히고, 낮은 차는 떨어지며 튑니다.
+	FVector BoundsOrigin = FVector::ZeroVector;
+	FVector BoundsExtent = FVector::ZeroVector;
+	Owner->GetActorBounds(true, BoundsOrigin, BoundsExtent);
+
+	const double OriginAboveBottom = FMath::Max(0.0, Owner->GetActorLocation().Z - (BoundsOrigin.Z - BoundsExtent.Z));
+
+	// 스플라인 높이가 노면과 같다는 보장이 없어, 그 자리 위에서 아래로 노면을 찾습니다.
+	// 못 찾으면 스플라인보다 넉넉히 위에 놓아 떨어지게 둡니다.
+	FVector Location = OnTrack + FVector(0.f, 0.f, 150.f);
+
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(RacingPlaceOnTrack), false, Owner);
+	FCollisionObjectQueryParams Objects(ECC_WorldStatic);
+	FHitResult Hit;
+
+	if (World->LineTraceSingleByObjectType(Hit, OnTrack + FVector(0.f, 0.f, 300.f), OnTrack - FVector(0.f, 0.f, 1200.f), Objects, Params))
+	{
+		Location.Z = Hit.ImpactPoint.Z + OriginAboveBottom + RespawnClearance;
+	}
+
+	Owner->SetActorTransform(FTransform(Facing, Location), false, nullptr, ETeleportType::TeleportPhysics);
+
+	if (UPrimitiveComponent* Root = Cast<UPrimitiveComponent>(Owner->GetRootComponent()))
+	{
+		Root->SetPhysicsLinearVelocity(FVector::ZeroVector);
+		Root->SetPhysicsAngularVelocityInDegrees(FVector::ZeroVector);
+	}
+
+	// 잠겨 있던 차라면 붙잡을 자리도 옮긴 자리입니다. 안 그러면 다음 틱에 원래 자리로 끌려갑니다.
+	LockedTransform = Owner->GetActorTransform();
+
+	return true;
+}
 
 int32 URaceParticipantComponent::RefreshProgress(const ARacingSpline& Track, float DeltaTime)
 {

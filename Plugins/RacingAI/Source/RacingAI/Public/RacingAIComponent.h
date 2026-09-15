@@ -137,10 +137,14 @@ public:
 	/**
 	 * 완주 상태로 전환합니다.
 	 *
-	 * 레이싱 라인은 계속 따라가되 스로틀을 놓고 서서히 멈춥니다. 결승선 직후
-	 * 그 자리에 급정거하면 뒤따라오는 차와 부딪히기 때문입니다.
+	 * 레이싱 라인은 계속 따라가되 스로틀을 놓고 멈춥니다. 결승선 직후 그 자리에
+	 * 급정거하면 뒤따라오는 차와 부딪히기 때문입니다.
+	 *
+	 * InStopDeceleration(cm/s^2)을 주면 그 감속으로 허용 속도를 낮춰 가며 섭니다. 레이스가
+	 * 끝나 모두를 함께 세울 때 쓰며, 모두가 같은 감속으로 서므로 서로 받지 않습니다.
+	 * 0이면 예전처럼 브레이크를 살짝 걸어 알아서 섭니다.
 	 */
-	void EnterFinished();
+	void EnterFinished(float InStopDeceleration = 0.f);
 
 	/**
 	 * 다음 레이스를 위해 내부 상태를 전부 초기화합니다.
@@ -172,8 +176,8 @@ private:
 	/** 복구 타이머를 갱신하고 필요하면 상태를 전환합니다. true면 이번 프레임 주행을 건너뜁니다 */
 	bool UpdateRecovery(const ARacingSpline& Track, float DeltaTime);
 
-	/** 스플라인 위로 재배치합니다 */
-	void RespawnOnTrack(const ARacingSpline& Track);
+	/** 갇히거나 뒤집힌 차를 스플라인 위로 재배치하고 복구 상태를 초기화합니다 */
+	void RecoverOntoTrack(const ARacingSpline& Track);
 
 	/** 차량에 입력을 적용하는 구현체입니다 */
 	UPROPERTY(Transient)
@@ -196,4 +200,8 @@ private:
 	/** 지난 갱신 시점의 누적 주행 거리. 차이를 시간으로 나눠 트랙을 따라 나아가는 속도를 낸다 */
 	float LastProgressDistance = 0.f;
 	bool bHasProgressReference = false;
+
+	/** 완주 후 세울 때 지금 허용하는 속도(cm/s)와 그것을 낮추는 감속도. 감속도가 0이면 예전 방식 */
+	float StopAllowedSpeed = 0.f;
+	float StopDeceleration = 0.f;
 };

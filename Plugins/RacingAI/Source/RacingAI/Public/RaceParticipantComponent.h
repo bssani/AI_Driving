@@ -135,6 +135,64 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Racing AI", meta = (ClampMin = "0.5", Units = "cm"))
 	float LockedDriftTolerance = 5.f;
 
+	//--------------------------------------------------------------------------
+	// 레이스 종료 정지
+	//--------------------------------------------------------------------------
+
+	/**
+	 * 차를 일정한 감속으로 세운 다음 잠급니다. 레이스가 끝났을 때 플레이어에게 씁니다.
+	 *
+	 * 곧바로 SetInputLocked(true)를 부르면 달리던 차가 그 자리에서 멈춥니다. VR에서 시속
+	 * 150 km로 달리다 한 프레임 만에 서면 멀미를 넘어 불쾌감이 됩니다. 그래서 속도의 상한을
+	 * Deceleration만큼씩 낮춰 가며 누르고, 거의 섰을 때 잠급니다.
+	 *
+	 * 세우는 동안 핸들은 살려 둡니다. 결승 지점이 커브일 수 있고, 핸들까지 막으면 곧게
+	 * 미끄러져 벽에 박습니다. 스로틀을 밟아도 상한을 넘지 못하므로 조작 경로와 무관하게 섭니다.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Racing AI")
+	void StopAndHold(float Deceleration = 600.f);
+
+	/** StopAndHold로 세우는 중인지 */
+	UFUNCTION(BlueprintPure, Category = "Racing AI")
+	bool IsStopping() const { return bStopping; }
+
+	//--------------------------------------------------------------------------
+	// 트랙 위로 되돌리기
+	//--------------------------------------------------------------------------
+
+	/**
+	 * 가장 가까운 트랙 위로 차를 옮겨 세웁니다. 벽에 박혀 못 나올 때 키 하나로 부르는 용도입니다.
+	 *
+	 * 지금 자리에서 줄을 따라 가장 가까운 지점을 찾고, 좌우로는 원래 있던 쪽을 유지하되
+	 * 벽에서 떨어지도록 도로 안쪽으로 당깁니다. 방향은 트랙 진행 방향으로 맞추고 속도는 지웁니다.
+	 * 높이는 그 자리 노면을 찾아 맞춥니다.
+	 *
+	 * 출발 전처럼 조작이 잠겨 있으면 옮기지 않고 false를 돌려줍니다. 그리드를 흐트러뜨리지 않기 위해서입니다.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Racing AI")
+	bool RespawnOnTrack();
+
+	/**
+	 * RespawnOnTrack이 옮길 때 좌우 위치를 도로 반폭의 몇 배 안으로 당길지입니다.
+	 *
+	 * 0이면 항상 가운데, 1이면 원래 좌우 위치 그대로입니다. 벽에 붙은 차를 벽 옆에 다시 놓으면
+	 * 곧바로 또 박으므로 반쯤 안으로 당깁니다.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Racing AI|Respawn", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float RespawnLaneFraction = 0.5f;
+
+	/** 옮긴 차의 바퀴 바닥을 노면에서 얼마나 띄워 놓을지입니다 (cm). 0이면 바퀴가 노면에 박힐 수 있습니다 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Racing AI|Respawn", meta = (ClampMin = "0.0", Units = "cm"))
+	float RespawnClearance = 30.f;
+
+	/**
+	 * 트랙의 지정한 자리에 차를 놓습니다. RespawnOnTrack과 AI 재배치가 함께 씁니다.
+	 *
+	 * 스플라인 높이가 노면과 같다는 보장이 없어서, 그 자리 위에서 아래로 노면을 찾아 높이를
+	 * 정합니다. 노면을 못 찾으면 스플라인보다 150cm 위에 놓습니다.
+	 */
+	bool PlaceOnTrack(const ARacingSpline& Track, float SplineDistance, float LateralOffset);
+
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
 
 protected:
@@ -146,6 +204,12 @@ protected:
 
 	/** 소유 액터나 그 컴포넌트에서 IRacingVehicleInput 구현체를 찾습니다 */
 	UObject* ResolveVehicleInputTarget();
+
+	/** StopAndHold 중에 속도 상한을 낮추고 누릅니다 */
+	void UpdateStopping(float DeltaTime);
+
+	/** 플레이어 컨트롤러가 먼저 틱하도록 걸거나 풉니다. 그 프레임의 입력이 처리된 뒤에 눌러야 합니다 */
+	void SetControllerTickPrerequisite(bool bEnable);
 
 	/** 직전 프레임의 스플라인 거리. 랩 판정에 씁니다 */
 	float PreviousDistance = 0.f;
@@ -161,4 +225,9 @@ protected:
 
 	/** 매 틱 다시 찾지 않기 위해 캐시합니다 */
 	TWeakObjectPtr<UObject> VehicleInputTarget;
+
+	/** StopAndHold로 세우는 중인지, 지금 허용하는 속도(cm/s)와 그것을 낮추는 감속도 */
+	bool bStopping = false;
+	float StoppingAllowedSpeed = 0.f;
+	float StoppingDeceleration = 0.f;
 };

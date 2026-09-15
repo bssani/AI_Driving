@@ -128,11 +128,14 @@ void URacingAIComponent::BeginRacing()
 	}
 }
 
-void URacingAIComponent::EnterFinished()
+void URacingAIComponent::EnterFinished(float InStopDeceleration)
 {
 	State = ERacingAIState::Finished;
 	StuckTimer = 0.f;
 	ReverseTimer = 0.f;
+
+	StopDeceleration = FMath::Max(0.f, InStopDeceleration);
+	StopAllowedSpeed = FMath::Max(0.f, Progress.ForwardSpeed);
 
 	if (UObject* Target = VehicleInput.GetObject())
 	{
@@ -197,10 +200,28 @@ void URacingAIComponent::Advance(const ARacingSpline& Track, float DeltaTime)
 		// 완주 후에도 레이싱 라인은 계속 따라갑니다. 조향을 놓으면 결승선 직후
 		// 트랙 밖으로 흘러나가 다음 회차의 그리드 리셋 전까지 이상하게 서 있게 됩니다.
 		const float FinishSteering = ComputeSteering(Track, DeltaTime);
-		const float FinishBrake = FMath::Abs(Progress.ForwardSpeed) > 50.f ? 0.4f : 1.f;
+		const float Speed = Progress.ForwardSpeed;
+		float FinishBrake = 1.f;
+
+		if (StopDeceleration > 0.f)
+		{
+			// 정해진 감속으로 허용 속도를 낮춰 가며 따라갑니다. 모두가 같은 감속으로 서므로
+			// 앞뒤 간격이 유지되어, 앞차가 먼저 서서 뒤차가 들이받는 일이 없습니다.
+			StopAllowedSpeed = FMath::Max(0.f, StopAllowedSpeed - StopDeceleration * DeltaTime);
+
+			FinishBrake = StopAllowedSpeed <= KINDA_SMALL_NUMBER
+				? 1.f
+				: FMath::Clamp((Speed - StopAllowedSpeed) * GetEffectiveProfile().SpeedControlGain, 0.f, 1.f);
+
+			TargetSpeed = StopAllowedSpeed;
+		}
+		else
+		{
+			FinishBrake = FMath::Abs(Speed) > 50.f ? 0.4f : 1.f;
+			TargetSpeed = 0.f;
+		}
 
 		ApplyInputs(FinishSteering, 0.f, FinishBrake);
-		TargetSpeed = 0.f;
 
 		return;
 	}
@@ -411,7 +432,7 @@ bool URacingAIComponent::UpdateRecovery(const ARacingSpline& Track, float DeltaT
 
 	if (FlippedTimer >= P.FlippedTimeToRespawn || bOffTrack)
 	{
-		RespawnOnTrack(Track);
+		RecoverOntoTrack(Track);
 
 		return true;
 	}
@@ -456,7 +477,7 @@ bool URacingAIComponent::UpdateRecovery(const ARacingSpline& Track, float DeltaT
 				UE_LOG(LogRacingAI, Log, TEXT("%s: 후진 탈출 %d회 실패, 트랙 위로 재배치합니다."),
 					*GetNameSafe(GetOwner()), StuckAttempts - 1);
 
-				RespawnOnTrack(Track);
+				RecoverOntoTrack(Track);
 
 				return true;
 			}
@@ -487,30 +508,16 @@ bool URacingAIComponent::UpdateRecovery(const ARacingSpline& Track, float DeltaT
 	return false;
 }
 
-void URacingAIComponent::RespawnOnTrack(const ARacingSpline& Track)
+void URacingAIComponent::RecoverOntoTrack(const ARacingSpline& Track)
 {
-	AActor* Owner = GetOwner();
-	if (!Owner)
-	{
-		return;
-	}
-
 	const URacingAIProfile& P = GetEffectiveProfile();
 
 	// 갇힌 자리 그대로, 그것도 그리드 차선으로 되돌리고 있었다. 그리드 차선은 출발할 때 서
 	// 있던 자리일 뿐이어서 좁은 트랙에서는 도로 밖일 수 있고, 그러면 같은 벽으로 돌아가 같은
 	// 자리에 다시 갇힌다. 달리던 라인 위로 돌려놓는다.
-	const float Distance = Progress.DistanceAlongSpline + P.RespawnAheadDistance;
-
-	const FVector Location = Track.GetOffsetLocationAtDistance(Distance, P.RacingLineOffset) + FVector(0.f, 0.f, 150.f);
-	const FRotator Rotation = Track.GetDirectionAtDistance(Distance).Rotation();
-
-	Owner->SetActorTransform(FTransform(Rotation, Location), false, nullptr, ETeleportType::TeleportPhysics);
-
-	if (UPrimitiveComponent* Root = Cast<UPrimitiveComponent>(Owner->GetRootComponent()))
+	if (!PlaceOnTrack(Track, Progress.DistanceAlongSpline + P.RespawnAheadDistance, P.RacingLineOffset))
 	{
-		Root->SetPhysicsLinearVelocity(FVector::ZeroVector);
-		Root->SetPhysicsAngularVelocityInDegrees(FVector::ZeroVector);
+		return;
 	}
 
 	FlippedTimer = 0.f;
@@ -522,7 +529,7 @@ void URacingAIComponent::RespawnOnTrack(const ARacingSpline& Track)
 	State = ERacingAIState::Racing;
 
 	// 재배치 직후에도 속도가 0이라 곧바로 갇힘으로 오인됩니다. 출발과 같은 유예를 줍니다.
-	StuckTimer = -GetEffectiveProfile().LaunchGraceSeconds;
+	StuckTimer = -P.LaunchGraceSeconds;
 
 	if (UObject* Target = VehicleInput.GetObject())
 	{

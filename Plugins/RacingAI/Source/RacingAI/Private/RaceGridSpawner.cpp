@@ -20,7 +20,9 @@ ARaceGridSpawner::ARaceGridSpawner()
 
 	StartRaceKey = EKeys::Enter;
 	ResetRaceKey = EKeys::Delete;
-	RestartRaceKey = EKeys::BackSpace;
+	// 템플릿 차량 입력(IMC_Vehicle_Default)이 BackSpace를 차량 리셋에 쓰고 있어, 여기에도 두면
+	// 벽에 박힌 차를 빼려고 누른 순간 레이스까지 처음부터 다시 시작됩니다.
+	RestartRaceKey = EKeys::End;
 }
 
 void ARaceGridSpawner::BeginPlay()
@@ -173,6 +175,14 @@ void ARaceGridSpawner::BuildGrid()
 	Director->MaxAIUpdatesPerFrame = MaxAIUpdatesPerFrame;
 	Director->bEndRaceWhenPlayerFinishes = bEndRaceWhenPlayerFinishes;
 	Director->RaceTimeLimitSeconds = RaceTimeLimitSeconds;
+	Director->bStopEveryoneWhenRaceEnds = bStopEveryoneWhenRaceEnds;
+	Director->FinishStopDeceleration = FinishStopDeceleration;
+
+	// 비워 두었을 때 지우지는 않습니다. 중앙 매니저가 먼저 코드로 정해 두었을 수 있습니다.
+	if (StopLineMarker)
+	{
+		Director->SetStopLineAtLocation(StopLineMarker->GetActorLocation());
+	}
 
 	UsedLiveryNames.Reset();
 
