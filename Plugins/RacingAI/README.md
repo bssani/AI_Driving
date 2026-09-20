@@ -25,6 +25,25 @@
 4. `Grid Slots`에 AI 대수만큼 칸을 추가하고 난이도 프로필을 배정
 5. `Draw Debug`를 켜고 Play
 
+## 기록 시간
+
+화면에 띄우고 기록으로 남길 숫자는 `GetPlayerTimeSeconds()`입니다.
+
+    Director->GetPlayerTimeSeconds()   달리는 동안 올라가고, 결승선을 넘는 순간 멈춘다
+    Director->IsPlayerTimeRunning()    아직 움직이는지. 꺼지는 순간이 기록 확정
+    PlayerParticipant->bFinished       기록으로 쓸 수 있는지
+
+**`GetRaceElapsedSeconds()`를 그대로 쓰면 안 됩니다.** 그것은 레이스의 길이지 플레이어의
+기록이 아닙니다. 뒤에 오는 AI를 기다리는 동안에도 계속 올라가므로, 완주한 사람의 숫자가
+결과 화면에서 혼자 늘어납니다. 실측으로 확인한 값입니다 — 선두가 35.60초에 완주한 뒤
+레이스가 76초까지 도는 동안 그의 `FinishTimeSeconds`는 35.60에 그대로 있었습니다.
+
+`GetRaceElapsedSeconds()`도 레이스가 끝나면 그 시점에서 멈춥니다. 깃발이 내려간 뒤로도
+세는 시계는 무엇의 경과 시간도 아닙니다.
+
+미완주면 레이스가 끝난 시각이 나옵니다. 0이 아닌 이유는 결과 화면이 00:00으로 튀면
+고장처럼 보이기 때문이고, 그것이 기록이 아니라는 사실은 `bDidNotFinish`가 말합니다.
+
 ## 반드시 해야 하는 것
 
 자동차를 바꿀 때마다 **횡가속 한계를 실측해서** 프로필의

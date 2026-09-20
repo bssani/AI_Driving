@@ -238,9 +238,28 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Racing AI|Race")
 	bool IsRaceStarted() const { return RaceState == ERaceState::Racing; }
 
-	/** 출발 이후 경과 시간 (초). 시작 전이면 0 */
+	/** 출발 이후 경과 시간 (초). 시작 전이면 0이고, **레이스가 끝나면 그 시점에서 멈춥니다.**
+	 *  깃발이 내려간 뒤로도 계속 세는 시계는 무엇의 경과 시간도 아닙니다 */
 	UFUNCTION(BlueprintPure, Category = "Racing AI|Race")
 	float GetRaceElapsedSeconds() const;
+
+	/**
+	 * 플레이어의 스톱워치입니다. 화면에 띄우고 기록으로 남길 숫자가 이것입니다.
+	 *
+	 * 달리는 동안 올라가다가 **플레이어가 결승선을 넘는 순간 멈춥니다.** 뒤에 오는 AI가
+	 * 아직 달리고 있든, 레이스가 계속되든 상관없습니다 — 재는 것은 플레이어의 기록이지
+	 * 레이스의 길이가 아닙니다.
+	 *
+	 * 플레이어가 없거나 출발 전이면 0입니다. 미완주(`bDidNotFinish`)면 레이스가 끝난
+	 * 시각에서 멈춘 값이 나오는데, **그것은 기록이 아닙니다.** 기록으로 쓸 수 있는지는
+	 * 플레이어 참가자의 `bFinished`로 판단하세요.
+	 */
+	UFUNCTION(BlueprintPure, Category = "Racing AI|Race")
+	float GetPlayerTimeSeconds() const;
+
+	/** 위 숫자가 아직 움직이고 있는지 여부입니다. 꺼지는 순간이 기록이 확정되는 순간입니다 */
+	UFUNCTION(BlueprintPure, Category = "Racing AI|Race")
+	bool IsPlayerTimeRunning() const;
 
 	//--------------------------------------------------------------------------
 	// 참가자
@@ -423,6 +442,9 @@ private:
 	int32 TotalLaps = 0;
 	int32 FinishedCount = 0;
 	float RaceStartTimeSeconds = 0.f;
+
+	/** 레이스가 끝난 시점의 경과 시간. 끝난 뒤 GetRaceElapsedSeconds가 돌려주는 값입니다 */
+	float RaceEndElapsedSeconds = 0.f;
 	int32 CountdownRemaining = 0;
 
 	FTimerHandle CountdownTimer;

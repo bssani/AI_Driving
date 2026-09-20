@@ -208,7 +208,43 @@ float URaceDirectorSubsystem::GetRaceElapsedSeconds() const
 		return 0.f;
 	}
 
+	// 끝난 뒤에는 그 시점에서 멈춥니다. 월드 시계를 그대로 빼면 결과 화면을 보는 내내
+	// 숫자가 올라가는데, 그것은 무엇의 경과 시간도 아닙니다.
+	if (RaceState == ERaceState::Finished)
+	{
+		return RaceEndElapsedSeconds;
+	}
+
 	return World->GetTimeSeconds() - RaceStartTimeSeconds;
+}
+
+float URaceDirectorSubsystem::GetPlayerTimeSeconds() const
+{
+	const URaceParticipantComponent* Player = GetPlayerParticipant();
+
+	if (!Player)
+	{
+		return 0.f;
+	}
+
+	// 완주한 순간에 고정됩니다. 레이스가 아직 끝나지 않았어도 — 뒤에 오는 AI를 기다리는
+	// 동안 플레이어의 기록이 계속 늘어나면 그것은 기록이 아닙니다.
+	if (Player->bFinished)
+	{
+		return Player->FinishTimeSeconds;
+	}
+
+	return GetRaceElapsedSeconds();
+}
+
+bool URaceDirectorSubsystem::IsPlayerTimeRunning() const
+{
+	const URaceParticipantComponent* Player = GetPlayerParticipant();
+
+	return RaceState == ERaceState::Racing
+		&& Player != nullptr
+		&& !Player->bFinished
+		&& !Player->bDidNotFinish;
 }
 
 void URaceDirectorSubsystem::HoldAtGrid()
@@ -431,6 +467,9 @@ void URaceDirectorSubsystem::ConcludeRace()
 		return;
 	}
 
+	// 상태를 바꾸기 전에 찍어야 합니다. 바꾼 뒤에 읽으면 GetRaceElapsedSeconds가 이미
+	// 얼어붙은 값을 돌려주므로 0이 박힙니다.
+	RaceEndElapsedSeconds = GetRaceElapsedSeconds();
 	RaceState = ERaceState::Finished;
 
 	// 완주하지 못한 참가자에게도 진행도 순으로 등수를 줍니다. 결과 화면이
@@ -498,6 +537,7 @@ void URaceDirectorSubsystem::ResetRace()
 	RaceState = ERaceState::Idle;
 	FinishedCount = 0;
 	RaceStartTimeSeconds = 0.f;
+	RaceEndElapsedSeconds = 0.f;
 	CountdownRemaining = 0;
 
 	HoldAtGrid();
