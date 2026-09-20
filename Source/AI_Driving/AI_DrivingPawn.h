@@ -328,9 +328,40 @@ protected:
 	UFUNCTION(BlueprintImplementableEvent, Category="Vehicle")
 	void BrakeLights(bool bBraking);
 
+	/**
+	 * Brake input at which the lights come on, like the switch on a real pedal: a touch is
+	 * enough, and lifting off the throttle is not braking however hard the car slows down.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Vehicle", meta=(ClampMin="0.0", ClampMax="1.0"))
+	float BrakeLightThreshold = 0.05f;
+
+	/**
+	 * How far the pedal has to come back up before the lights go out, as a fraction of the
+	 * threshold. A foot resting right on the switch would otherwise flicker the lights at frame
+	 * rate, and an analogue pedal is never perfectly still.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Vehicle", meta=(ClampMin="0.0", ClampMax="1.0"))
+	float BrakeLightReleaseRatio = 0.6f;
+
+	/** Whether the brake lights are currently lit. Driven from the vehicle, not from input */
+	UFUNCTION(BlueprintPure, Category="Vehicle")
+	bool AreBrakeLightsOn() const { return bBrakeLightsOn; }
+
 	/** Checks if the car is flipped upside down and automatically resets it */
 	UFUNCTION()
 	void FlippedCheck();
+
+	/**
+	 * Lights the brake lamps from what the car is actually being asked to do.
+	 *
+	 * Read from the movement component rather than from the input handlers, because the input
+	 * handlers only run for a human. The AI drives through IRacingVehicleInput, which lands in
+	 * the same SetBrakeInput, so watching the vehicle covers both and watching the pedal events
+	 * covers only one - which is why the AI cars used to brake in the dark.
+	 */
+	void UpdateBrakeLights();
+
+	bool bBrakeLightsOn = false;
 
 public:
 	/** Returns the front spring arm subobject */

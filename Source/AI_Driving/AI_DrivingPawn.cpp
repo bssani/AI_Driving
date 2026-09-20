@@ -409,6 +409,8 @@ void AAI_DrivingPawn::Tick(float Delta)
 		}
 	}
 
+	UpdateBrakeLights();
+
 	// add some angular damping if the vehicle is in midair
 	bool bMovingOnGround = ChaosVehicleMovement->IsMovingOnGround();
 	GetMesh()->SetAngularDamping(bMovingOnGround ? 0.0f : 3.0f);
@@ -524,15 +526,12 @@ void AAI_DrivingPawn::DoBrake(float BrakeValue)
 
 void AAI_DrivingPawn::DoBrakeStart()
 {
-	// call the Blueprint hook for the brake lights
-	BrakeLights(true);
+	// the lights are not touched here. They follow the vehicle from Tick instead, which is the
+	// only way the AI cars get any: they never run these handlers
 }
 
 void AAI_DrivingPawn::DoBrakeStop()
 {
-	// call the Blueprint hook for the brake lights
-	BrakeLights(false);
-
 	// reset brake input to zero
 	ChaosVehicleMovement->SetBrakeInput(0.0f);
 }
@@ -541,18 +540,39 @@ void AAI_DrivingPawn::DoHandbrakeStart()
 {
 	// add the input
 	ChaosVehicleMovement->SetHandbrakeInput(true);
-
-	// call the Blueprint hook for the break lights
-	BrakeLights(true);
 }
 
 void AAI_DrivingPawn::DoHandbrakeStop()
 {
 	// add the input
 	ChaosVehicleMovement->SetHandbrakeInput(false);
+}
 
-	// call the Blueprint hook for the break lights
-	BrakeLights(false);
+void AAI_DrivingPawn::UpdateBrakeLights()
+{
+	if (!ChaosVehicleMovement)
+	{
+		return;
+	}
+
+	// it takes more pedal to light them than to keep them lit, so a foot resting on the switch
+	// settles on an answer instead of strobing
+	const float Threshold = bBrakeLightsOn
+		? BrakeLightThreshold * BrakeLightReleaseRatio
+		: BrakeLightThreshold;
+
+	const bool bBraking = ChaosVehicleMovement->GetBrakeInput() > Threshold
+		|| ChaosVehicleMovement->GetHandbrakeInput();
+
+	if (bBraking == bBrakeLightsOn)
+	{
+		return;
+	}
+
+	bBrakeLightsOn = bBraking;
+
+	// the Blueprint hook is unchanged, so whatever already drives the lamps keeps working
+	BrakeLights(bBraking);
 }
 
 void AAI_DrivingPawn::DoLookAround(float YawDelta)
