@@ -145,7 +145,6 @@ float URaceCrowdSubsystem::ComputeLocalExcitement(const ARaceCrowdStand& Stand, 
 	default:                    Base = IdleExcitement;      break;
 	}
 
-	const FVector Here = Stand.GetListeningLocation();
 	const float Radius = FMath::Max(Stand.ReactionRadius, 1.0f);
 
 	// what is in front of this stand right now: the closest car, how fast it is going, and
@@ -166,7 +165,10 @@ float URaceCrowdSubsystem::ComputeLocalExcitement(const ARaceCrowdStand& Stand, 
 			continue;
 		}
 
-		const float Distance = FVector::Dist(Owner->GetActorLocation(), Here);
+		// to the nearest seat, not to the actor. On a hundred metres of grandstand the origin
+		// can be fifty metres from the part the car is actually passing, which would have the
+		// far end of the stand reacting and the near end ignoring it
+		const float Distance = FVector::Dist(Owner->GetActorLocation(), Stand.GetClosestPointTo(Owner->GetActorLocation()));
 
 		if (Distance > Radius)
 		{
@@ -252,7 +254,7 @@ void URaceCrowdSubsystem::ReactNearest(const FVector& Location, float Intensity)
 			continue;
 		}
 
-		const float Distance = FVector::Dist(Stand->GetListeningLocation(), Location);
+		const float Distance = FVector::Dist(Stand->GetClosestPointTo(Location), Location);
 
 		if (Distance < BestDistance && Distance <= Stand->ReactionRadius)
 		{
@@ -265,7 +267,7 @@ void URaceCrowdSubsystem::ReactNearest(const FVector& Location, float Intensity)
 	// something nobody could see is worse than silence
 	if (Nearest)
 	{
-		Nearest->PlayReaction(Intensity);
+		Nearest->PlayReaction(Intensity, Location);
 	}
 }
 
