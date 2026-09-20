@@ -11,7 +11,9 @@ class USpringArmComponent;
 class UInputAction;
 class UStaticMeshComponent;
 class USkeletalMeshComponent;
+class USkeletalMesh;
 class UAnimationAsset;
+class UAnimInstance;
 class UVRHandPresenceComponent;
 class UPoseableMeshComponent;
 class UVehicleSoundComponent;
@@ -137,9 +139,48 @@ protected:
 	/** Keeps track of which camera is active */
 	bool bFrontCameraActive = false;
 
-	/** Pose the mesh hands hold. They never let go of the rim, so one pose is enough */
-	UPROPERTY(EditAnywhere, Category="VR")
-	TObjectPtr<UAnimationAsset> GripHandPose;
+	/** Mesh shown in place of the driver's left hand while they hold the wheel. Leave it empty to
+	 *  show no hand on that side. Any skeletal mesh will do: nothing in code assumes the hand that
+	 *  ships with the steering asset pack */
+	UPROPERTY(EditAnywhere, Category="VR|Grip Hands")
+	TObjectPtr<USkeletalMesh> LeftGripHandMesh;
+
+	/** Mesh shown in place of the driver's right hand while they hold the wheel */
+	UPROPERTY(EditAnywhere, Category="VR|Grip Hands")
+	TObjectPtr<USkeletalMesh> RightGripHandMesh;
+
+	/** Where the left hand sits, relative to the steering wheel. A negative scale mirrors the
+	 *  mesh, which is what turns a right hand into a left one; set the scale to 1 when the mesh is
+	 *  already a left hand. The default mirrors, because the asset pack only ships a right hand */
+	UPROPERTY(EditAnywhere, Category="VR|Grip Hands")
+	FTransform LeftGripHandOffset;
+
+	/** Where the right hand sits, relative to the steering wheel */
+	UPROPERTY(EditAnywhere, Category="VR|Grip Hands")
+	FTransform RightGripHandOffset;
+
+	/** Animation Blueprint the left hand runs. Set this when the grip is driven by a graph, for a
+	 *  hand that reacts to input; leave it empty to hold the single pose below instead */
+	UPROPERTY(EditAnywhere, Category="VR|Grip Hands")
+	TSubclassOf<UAnimInstance> LeftGripHandAnimClass;
+
+	/** Animation Blueprint the right hand runs */
+	UPROPERTY(EditAnywhere, Category="VR|Grip Hands")
+	TSubclassOf<UAnimInstance> RightGripHandAnimClass;
+
+	/** Pose the left hand holds when it has no Animation Blueprint. The hands never let go of the
+	 *  rim, so a single pose is enough. It has to be built on the same skeleton as the mesh above,
+	 *  or it is ignored and the hand shows its reference pose */
+	UPROPERTY(EditAnywhere, Category="VR|Grip Hands")
+	TObjectPtr<UAnimationAsset> LeftGripHandPose;
+
+	/** Pose the right hand holds when it has no Animation Blueprint */
+	UPROPERTY(EditAnywhere, Category="VR|Grip Hands")
+	TObjectPtr<UAnimationAsset> RightGripHandPose;
+
+	/** Pushes the properties above onto the two hand components. Runs on construction as well as
+	 *  at BeginPlay, so a hand swapped in the Blueprint can be lined up in the viewport */
+	void ApplyGripHandSetup();
 
 	/** True while this pawn is driving a head mounted display */
 	bool bVRModeActive = false;
@@ -179,6 +220,9 @@ public:
 	// End Pawn interface
 
 	// Begin Actor interface
+
+	/** Applies the Blueprint's hand setup, so hands can be placed with the viewport open */
+	virtual void OnConstruction(const FTransform& Transform) override;
 
 	/** Initialization */
 	virtual void BeginPlay() override;

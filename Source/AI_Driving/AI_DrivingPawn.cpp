@@ -16,6 +16,7 @@
 #include "IXRTrackingSystem.h"
 #include "Components/StaticMeshComponent.h"
 #include "Animation/AnimationAsset.h"
+#include "Animation/Skeleton.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/SkeletalMesh.h"
 #include "UObject/ConstructorHelpers.h"
@@ -101,40 +102,43 @@ AAI_DrivingPawn::AAI_DrivingPawn()
 		SteeringWheelMesh->SetStaticMesh(WheelMesh.Object);
 	}
 
-	// construct the hands that sit on the rim. Only a right hand ships with the asset pack, so the
-	// left is the same mesh with its Y scale negated, which turns a right hand into a left one.
-	// Mirroring this way leaves the normal map handed the wrong way round, which on a hand gripping
-	// a rim is not worth authoring a second mesh over.
-	static ConstructorHelpers::FObjectFinder<USkeletalMesh> HandMesh(TEXT("/Game/VR_SteeringV2/VR_Steering/Hands/Mesh/SK_MannequinHand_Right.SK_MannequinHand_Right"));
-
+	// construct the hands that sit on the rim. Which mesh they wear, where they sit and how they
+	// are posed are all properties, so the whole hand can be replaced from the vehicle Blueprint
+	// without touching code. What is set below is only the default: the hand from the VR Steering
+	// asset pack, placed where that pack places it.
 	LeftGripHand = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("Left Grip Hand"));
 	LeftGripHand->SetupAttachment(SteeringWheelMesh);
-	// These come from BP_SteeringBase in the VR Steering asset pack rather than from guesswork:
-	// its authored hand pivot and mesh transforms composed down into one, with the grip points it
-	// uses at 18cm out from the hub. Note the left hand is the right hand mirrored on Z, not Y.
-	LeftGripHand->SetRelativeLocation(FVector(-10.16f, -15.43f, -1.72f));
-	LeftGripHand->SetRelativeRotation(FRotator(2.44f, -11.39f, 29.26f));
-	LeftGripHand->SetRelativeScale3D(FVector(1.0f, 1.0f, -1.0f));
 	LeftGripHand->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 
 	RightGripHand = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("Right Grip Hand"));
 	RightGripHand->SetupAttachment(SteeringWheelMesh);
-	RightGripHand->SetRelativeLocation(FVector(10.16f, 15.46f, 2.48f));
-	RightGripHand->SetRelativeRotation(FRotator(0.0f, 0.0f, -163.88f));
 	RightGripHand->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+
+	// These come from BP_SteeringBase in the asset pack rather than from guesswork: its authored
+	// hand pivot and mesh transforms composed down into one, with the grip points it uses at 18cm
+	// out from the hub. They only mean anything for that hand's pivot and bone orientation, so a
+	// different mesh will need its own numbers. The left scale of -1 on Z mirrors the right hand,
+	// since the pack ships no left one; a mesh that is already a left hand wants a scale of 1.
+	LeftGripHandOffset = FTransform(FRotator(2.44f, -11.39f, 29.26f), FVector(-10.16f, -15.43f, -1.72f), FVector(1.0f, 1.0f, -1.0f));
+	RightGripHandOffset = FTransform(FRotator(0.0f, 0.0f, -163.88f), FVector(10.16f, 15.46f, 2.48f), FVector::OneVector);
+
+	static ConstructorHelpers::FObjectFinder<USkeletalMesh> HandMesh(TEXT("/Game/VR_SteeringV2/VR_Steering/Hands/Mesh/SK_MannequinHand_Right.SK_MannequinHand_Right"));
 
 	if (HandMesh.Succeeded())
 	{
-		LeftGripHand->SetSkeletalMesh(HandMesh.Object);
-		RightGripHand->SetSkeletalMesh(HandMesh.Object);
+		LeftGripHandMesh = HandMesh.Object;
+		RightGripHandMesh = HandMesh.Object;
 	}
 
 	static ConstructorHelpers::FObjectFinder<UAnimationAsset> GripPose(TEXT("/Game/VR_SteeringV2/VR_Steering/Hands/Animations/MannequinHand_Right_Grab.MannequinHand_Right_Grab"));
 
 	if (GripPose.Succeeded())
 	{
-		GripHandPose = GripPose.Object;
+		LeftGripHandPose = GripPose.Object;
+		RightGripHandPose = GripPose.Object;
 	}
+
+	ApplyGripHandSetup();
 
 	// construct the hands drawn from headset tracking. These hang off VROrigin like the camera
 	// does, so they share its tracking space. The Meta XR component fetches the runtime hand mesh
@@ -238,6 +242,79 @@ void AAI_DrivingPawn::SetupPlayerInputComponent(class UInputComponent* PlayerInp
 	}
 }
 
+void AAI_DrivingPawn::ApplyGripHandSetup()
+{
+	struct FGripHandSetup
+	{
+		USkeletalMeshComponent* Component;
+		USkeletalMesh* Mesh;
+		FTransform Offset;
+		UClass* AnimClass;
+		UAnimationAsset* Pose;
+	};
+
+	const FGripHandSetup Hands[] =
+	{
+		{ LeftGripHand, LeftGripHandMesh, LeftGripHandOffset, LeftGripHandAnimClass.Get(), LeftGripHandPose },
+		{ RightGripHand, RightGripHandMesh, RightGripHandOffset, RightGripHandAnimClass.Get(), RightGripHandPose }
+	};
+
+	for (const FGripHandSetup& Hand : Hands)
+	{
+		// the components are thrown away on every car nobody is sitting in, so they can be gone
+		if (!Hand.Component)
+		{
+			continue;
+		}
+
+		if (Hand.Component->GetSkeletalMeshAsset() != Hand.Mesh)
+		{
+			Hand.Component->SetSkeletalMeshAsset(Hand.Mesh);
+		}
+
+		Hand.Component->SetRelativeTransform(Hand.Offset);
+
+		if (Hand.AnimClass)
+		{
+			Hand.Component->SetAnimationMode(EAnimationMode::AnimationBlueprint);
+
+			if (Hand.Component->GetAnimClass() != Hand.AnimClass)
+			{
+				Hand.Component->SetAnimInstanceClass(Hand.AnimClass);
+			}
+		}
+		else if (Hand.Pose)
+		{
+			// a pose built on another skeleton is silently dropped by PlayAnimation and the hand
+			// shows its reference pose instead, which reads as "my grip animation did nothing".
+			// Say so rather than leaving it to be guessed at.
+			if (Hand.Mesh && Hand.Pose->GetSkeleton() != Hand.Mesh->GetSkeleton())
+			{
+				UE_LOG(LogAI_Driving, Warning, TEXT("Grip pose '%s' is built on skeleton '%s' but hand mesh '%s' uses '%s'. The hand will stay in its reference pose. Retarget the animation onto the mesh's skeleton, or drive the hand with an Animation Blueprint instead."),
+					*GetNameSafe(Hand.Pose), *GetNameSafe(Hand.Pose->GetSkeleton()), *GetNameSafe(Hand.Mesh), *GetNameSafe(Hand.Mesh->GetSkeleton()));
+			}
+			else
+			{
+				// a single node player is enough, since these hands never let go of the rim
+				Hand.Component->PlayAnimation(Hand.Pose, true);
+			}
+		}
+
+#if WITH_EDITOR
+		// pose the hands in the editor viewport as well, so a new hand can be lined up with the
+		// rim by eye instead of by starting the game and looking through a headset
+		Hand.Component->SetUpdateAnimationInEditor(true);
+#endif
+	}
+}
+
+void AAI_DrivingPawn::OnConstruction(const FTransform& Transform)
+{
+	Super::OnConstruction(Transform);
+
+	ApplyGripHandSetup();
+}
+
 void AAI_DrivingPawn::BeginPlay()
 {
 	Super::BeginPlay();
@@ -260,12 +337,9 @@ void AAI_DrivingPawn::BeginPlay()
 		bRecenterPending = true;
 	}
 
-	// hold the grip pose. A single node player is enough, since these hands never let go
-	if (GripHandPose)
-	{
-		LeftGripHand->PlayAnimation(GripHandPose, true);
-		RightGripHand->PlayAnimation(GripHandPose, true);
-	}
+	// hold the grip pose. OnConstruction has already done this, but a hand swapped from a
+	// construction script or from another Blueprint would land after it
+	ApplyGripHandSetup();
 
 	if (!bVRModeActive)
 	{
