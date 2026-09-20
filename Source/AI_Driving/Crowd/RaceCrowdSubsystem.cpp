@@ -110,7 +110,7 @@ void URaceCrowdSubsystem::UpdateCrowd(float DeltaTime)
 		default:                    Base = IdleExcitement;      break;
 		}
 
-		if (Director->GetRaceState() == ERaceState::Racing)
+		if (bCheerPositionChanges && Director->GetRaceState() == ERaceState::Racing)
 		{
 			DetectPlayerPositionChange(*Director);
 		}
@@ -279,8 +279,14 @@ void URaceCrowdSubsystem::ReactNearest(const FVector& Location, float Intensity)
 
 void URaceCrowdSubsystem::HandleRaceStarted()
 {
-	EventPulse = FMath::Min(EventPulse + EventPulseStrength, 1.0f);
+	// the position is cleared either way, so that switching position changes on mid-session does
+	// not immediately fire on the difference between now and whenever it was last looked at
 	LastPlayerPosition = 0;
+
+	if (bCheerRaceStart)
+	{
+		EventPulse = FMath::Min(EventPulse + EventPulseStrength, 1.0f);
+	}
 }
 
 void URaceCrowdSubsystem::HandleRacerFinished(URaceParticipantComponent* Participant, int32 FinishPosition)
@@ -288,7 +294,7 @@ void URaceCrowdSubsystem::HandleRacerFinished(URaceParticipantComponent* Partici
 	// only the player crossing the line is an event. The AI arriving afterwards is bookkeeping,
 	// and cheering it while the driver is still out on track tells them a story about somebody
 	// else at the exact moment their own is still running
-	if (!Participant || !Participant->bIsPlayer)
+	if (!bCheerPlayerFinish || !Participant || !Participant->bIsPlayer)
 	{
 		return;
 	}
@@ -314,9 +320,10 @@ void URaceCrowdSubsystem::LogState() const
 	const URaceDirectorSubsystem* Director = GetWorld() ? GetWorld()->GetSubsystem<URaceDirectorSubsystem>() : nullptr;
 
 	UE_LOG(LogRaceCrowd, Display,
-		TEXT("Crowd: %d stands  pulse %.2f  director %s%s"),
+		TEXT("Crowd: %d stands  pulse %.2f  director %s  cheer[overtake %d start %d finish %d]%s"),
 		Stands.Num(), EventPulse,
 		Director ? TEXT("yes") : TEXT("MISSING"),
+		bCheerPositionChanges ? 1 : 0, bCheerRaceStart ? 1 : 0, bCheerPlayerFinish ? 1 : 0,
 		ExcitementOverride >= 0.0f
 			? *FString::Printf(TEXT("  OVERRIDE PINNED AT %.2f"), ExcitementOverride)
 			: TEXT(""));
@@ -364,6 +371,52 @@ static FAutoConsoleCommandWithWorldAndArgs GCrowdExcitement(
 				? TEXT("released")
 				: *FString::Printf(TEXT("pinned to %.2f"), Crowd->ExcitementOverride),
 			Crowd->GetStandCount());
+	}));
+
+static FAutoConsoleCommandWithWorldAndArgs GCrowdCheer(
+	TEXT("crowd.Cheer"),
+	TEXT("crowd.Cheer <overtake|start|finish> <0|1> - whether the crowd treats that as an event. Overtakes are off by default: most of a real grandstand cannot see the pass and hears about it from the big screen. No argument lists the current settings."),
+	FConsoleCommandWithWorldAndArgsDelegate::CreateStatic([](const TArray<FString>& Args, UWorld* World)
+	{
+		URaceCrowdSubsystem* Crowd = GetCrowd(World);
+
+		if (!Crowd)
+		{
+			return;
+		}
+
+		if (Args.Num() < 2)
+		{
+			UE_LOG(LogRaceCrowd, Display, TEXT("crowd.Cheer: overtake %d  start %d  finish %d"),
+				Crowd->bCheerPositionChanges ? 1 : 0,
+				Crowd->bCheerRaceStart ? 1 : 0,
+				Crowd->bCheerPlayerFinish ? 1 : 0);
+			UE_LOG(LogRaceCrowd, Display, TEXT("Usage: crowd.Cheer <overtake|start|finish> <0|1>"));
+			return;
+		}
+
+		const bool bOn = FCString::Atoi(*Args[1]) != 0;
+		const FString Which = Args[0].ToLower();
+
+		if (Which == TEXT("overtake"))
+		{
+			Crowd->bCheerPositionChanges = bOn;
+		}
+		else if (Which == TEXT("start"))
+		{
+			Crowd->bCheerRaceStart = bOn;
+		}
+		else if (Which == TEXT("finish"))
+		{
+			Crowd->bCheerPlayerFinish = bOn;
+		}
+		else
+		{
+			UE_LOG(LogRaceCrowd, Warning, TEXT("Usage: crowd.Cheer <overtake|start|finish> <0|1>"));
+			return;
+		}
+
+		UE_LOG(LogRaceCrowd, Display, TEXT("crowd.Cheer: %s %s"), *Which, bOn ? TEXT("on") : TEXT("off"));
 	}));
 
 static FAutoConsoleCommandWithWorld GCrowdDumpState(

@@ -84,6 +84,37 @@ public:
 	UPROPERTY(BlueprintReadWrite, Category = "Crowd|Tuning", meta = (Units = "cm/s", ClampMin = "1.0"))
 	float ExcitingSpeed = 2500.0f;
 
+	//--------------------------------------------------------------------------
+	// Which events the crowd reacts to at all.
+	//
+	// Two different kinds of reaction are mixed in here and they are not equally true to life.
+	//
+	// Reacting to the SIGHT of a car - one going past at speed, two of them side by side right in
+	// front of the stand - is what a real crowd does, and it needs no knowledge of the race. That
+	// is PassBoost and BattleBoost, and zeroing those floats turns them off.
+	//
+	// Reacting to a POSITION CHANGING HANDS is a game convention more than a circuit one. Most of
+	// a real grandstand cannot see the pass, finds out from the big screen a beat late, and does
+	// not care much unless it is for the lead or for someone local. It is kept because this is an
+	// entertainment piece and being cheered for a pass feels good, but it is off by default.
+	//--------------------------------------------------------------------------
+
+	/** Whether the player gaining or losing a place is an event.
+	 *
+	 *  Off by default: see above. Turn it on if the reward matters more than the realism, which
+	 *  for a two-minute ride at a family day it well might. crowd.Cheer overtake 1 */
+	UPROPERTY(BlueprintReadWrite, Category = "Crowd|Events")
+	bool bCheerPositionChanges = false;
+
+	/** Whether the start of the race is an event. A grandstand at the lights is the loudest a
+	 *  circuit gets short of a crash, and this one is not a convention */
+	UPROPERTY(BlueprintReadWrite, Category = "Crowd|Events")
+	bool bCheerRaceStart = true;
+
+	/** Whether the player crossing the line is an event. Also not a convention */
+	UPROPERTY(BlueprintReadWrite, Category = "Crowd|Events")
+	bool bCheerPlayerFinish = true;
+
 	/** How much a player event adds, before it decays */
 	UPROPERTY(BlueprintReadWrite, Category = "Crowd|Tuning", meta = (ClampMin = "0.0", ClampMax = "1.0"))
 	float EventPulseStrength = 0.45f;
