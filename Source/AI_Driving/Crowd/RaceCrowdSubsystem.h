@@ -16,9 +16,14 @@ class URaceParticipantComponent;
  * separately is both slower and inconsistent, and a crowd that disagrees with itself across a
  * stadium is worse than one that is simply wrong.
  *
- * Excitement is a per-stand number, not a global one. A crowd at the far hairpin has no reason to
- * roar because something happened at the start line, and a stadium that reacts as one body reads
- * as a single speaker no matter how many actors it is made of.
+ * Everything here is about the player and nothing else. The listener is in the player's car, so
+ * the only crowd they can hear is the one they are driving past, and the only story worth telling
+ * is their own. Two AI cars fighting over fourth place on the other side of the circuit is not an
+ * event - it is not visible, not audible, and over by the time the player arrives.
+ *
+ * Excitement is still per-stand, because the stand the player is passing is not the stand two
+ * corners away, and a circuit that reacts as one body reads as a single speaker no matter how
+ * many actors it is made of.
  */
 UCLASS()
 class AI_DRIVING_API URaceCrowdSubsystem : public UTickableWorldSubsystem
@@ -61,27 +66,32 @@ public:
 	UPROPERTY(BlueprintReadWrite, Category = "Crowd|Tuning", meta = (ClampMin = "0.0", ClampMax = "1.0"))
 	float FinishExcitement = 0.85f;
 
-	/** Added when a car is passing directly in front of this stand, at speed */
+	/** Added when the player is passing directly in front of this stand, at speed */
 	UPROPERTY(BlueprintReadWrite, Category = "Crowd|Tuning", meta = (ClampMin = "0.0", ClampMax = "1.0"))
 	float PassBoost = 0.50f;
 
-	/** Added on top when two cars are close enough to be fighting as they pass. A procession and
-	 *  a battle are not the same event and a crowd is the main thing that says which it was */
+	/** Added on top when somebody is close enough to the player to be a fight. A procession and a
+	 *  battle are not the same event and a crowd is the main thing that says which it was */
 	UPROPERTY(BlueprintReadWrite, Category = "Crowd|Tuning", meta = (ClampMin = "0.0", ClampMax = "1.0"))
 	float BattleBoost = 0.28f;
 
-	/** How close two cars have to be, along the track, to count as fighting */
+	/** How close another car has to be to the player, along the track, to count as a fight */
 	UPROPERTY(BlueprintReadWrite, Category = "Crowd|Tuning", meta = (Units = "cm", ClampMin = "100.0"))
 	float BattleGap = 1500.0f;
 
-	/** Speed at which a car going past is as exciting as it gets. Below it the boost scales down,
-	 *  so a car limping past the stand does not get a standing ovation */
+	/** Speed at which the player going past is as exciting as it gets. Below it the boost scales
+	 *  down, so limping past the stand does not earn a standing ovation */
 	UPROPERTY(BlueprintReadWrite, Category = "Crowd|Tuning", meta = (Units = "cm/s", ClampMin = "1.0"))
 	float ExcitingSpeed = 2500.0f;
 
-	/** How much an overtake or a finish adds, before it decays */
+	/** How much a player event adds, before it decays */
 	UPROPERTY(BlueprintReadWrite, Category = "Crowd|Tuning", meta = (ClampMin = "0.0", ClampMax = "1.0"))
 	float EventPulseStrength = 0.45f;
+
+	/** How much of that a lost place is worth. Being passed is still drama and the crowd still
+	 *  reacts, but it is not the same noise as passing somebody */
+	UPROPERTY(BlueprintReadWrite, Category = "Crowd|Tuning", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float OvertakenPulseScale = 0.5f;
 
 	/** How fast an event pulse fades, per second */
 	UPROPERTY(BlueprintReadWrite, Category = "Crowd|Tuning", meta = (ClampMin = "0.01"))
@@ -107,18 +117,36 @@ public:
 
 	int32 GetStandCount() const { return Stands.Num(); }
 
+public:
+	/** What the crowd is watching: the player, and nothing else */
+	struct FPlayerFocus
+	{
+		bool bValid = false;
+		FVector Location = FVector::ZeroVector;
+
+		/** The player's speed as a fraction of ExcitingSpeed */
+		float SpeedFactor = 0.0f;
+
+		/** Whether somebody is close enough along the track to be racing them */
+		bool bInBattle = false;
+	};
+
 private:
 	void UpdateCrowd(float DeltaTime);
 
-	/** Overtakes are not broadcast by the director, so they are noticed here by watching each
-	 *  participant's position change. Only while actually racing: finishing and resetting both
-	 *  reshuffle the order without anyone having overtaken anybody */
-	void DetectOvertakes(URaceDirectorSubsystem& Director);
+	/** Reads the player's position, speed and whether anyone is on them. Gathered once per update
+	 *  rather than per stand: it is the same answer for every stand in the circuit */
+	FPlayerFocus GatherPlayerFocus(URaceDirectorSubsystem& Director) const;
 
-	/** Excitement this stand has earned from what is in front of it right now */
-	float ComputeLocalExcitement(const ARaceCrowdStand& Stand, URaceDirectorSubsystem& Director) const;
+	/** The director does not broadcast overtakes, so they are noticed by watching the player's
+	 *  position change. Only while actually racing: finishing and resetting both reshuffle the
+	 *  order without anyone having overtaken anybody */
+	void DetectPlayerPositionChange(URaceDirectorSubsystem& Director);
 
-	/** Fires a one-shot at whichever stand the event happened in front of */
+	/** Excitement this stand has earned from where the player is right now */
+	float ComputeLocalExcitement(const ARaceCrowdStand& Stand, float Base, const FPlayerFocus& Focus) const;
+
+	/** Fires a one-shot at whichever stand the player is in front of */
 	void ReactNearest(const FVector& Location, float Intensity);
 
 	UFUNCTION()
@@ -136,8 +164,8 @@ private:
 
 	TArray<TWeakObjectPtr<ARaceCrowdStand>> Stands;
 
-	/** Last known finishing position per participant, for spotting overtakes */
-	TMap<TWeakObjectPtr<URaceParticipantComponent>, int32> LastPosition;
+	/** The player's last known position, for spotting places gained and lost */
+	int32 LastPlayerPosition = 0;
 
 	TWeakObjectPtr<URaceDirectorSubsystem> BoundDirector;
 

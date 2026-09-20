@@ -29,7 +29,6 @@ void URaceCrowdSubsystem::Deinitialize()
 	}
 
 	Stands.Empty();
-	LastPosition.Empty();
 
 	Super::Deinitialize();
 }
@@ -98,9 +97,27 @@ void URaceCrowdSubsystem::UpdateCrowd(float DeltaTime)
 {
 	URaceDirectorSubsystem* Director = GetWorld() ? GetWorld()->GetSubsystem<URaceDirectorSubsystem>() : nullptr;
 
-	if (Director && Director->GetRaceState() == ERaceState::Racing)
+	float Base = IdleExcitement;
+	FPlayerFocus Focus;
+
+	if (Director)
 	{
-		DetectOvertakes(*Director);
+		switch (Director->GetRaceState())
+		{
+		case ERaceState::Countdown: Base = CountdownExcitement; break;
+		case ERaceState::Racing:    Base = RacingExcitement;    break;
+		case ERaceState::Finished:  Base = FinishExcitement;    break;
+		default:                    Base = IdleExcitement;      break;
+		}
+
+		if (Director->GetRaceState() == ERaceState::Racing)
+		{
+			DetectPlayerPositionChange(*Director);
+		}
+
+		// once, not once per stand: where the player is and what they are doing is the same
+		// answer for every grandstand on the circuit
+		Focus = GatherPlayerFocus(*Director);
 	}
 
 	for (const TWeakObjectPtr<ARaceCrowdStand>& Weak : Stands)
@@ -112,16 +129,9 @@ void URaceCrowdSubsystem::UpdateCrowd(float DeltaTime)
 			continue;
 		}
 
-		float Target;
-
-		if (ExcitementOverride >= 0.0f)
-		{
-			Target = FMath::Clamp(ExcitementOverride, 0.0f, 1.0f);
-		}
-		else
-		{
-			Target = Director ? ComputeLocalExcitement(*Stand, *Director) : IdleExcitement;
-		}
+		const float Target = ExcitementOverride >= 0.0f
+			? FMath::Clamp(ExcitementOverride, 0.0f, 1.0f)
+			: ComputeLocalExcitement(*Stand, Base, Focus);
 
 		// rising and falling at different rates is most of what makes this read as people rather
 		// than as a volume slider: a crowd catches on to something in a moment and takes a long
@@ -133,111 +143,107 @@ void URaceCrowdSubsystem::UpdateCrowd(float DeltaTime)
 	}
 }
 
-float URaceCrowdSubsystem::ComputeLocalExcitement(const ARaceCrowdStand& Stand, URaceDirectorSubsystem& Director) const
+URaceCrowdSubsystem::FPlayerFocus URaceCrowdSubsystem::GatherPlayerFocus(URaceDirectorSubsystem& Director) const
 {
-	float Base;
+	FPlayerFocus Focus;
 
-	switch (Director.GetRaceState())
+	const URaceParticipantComponent* Player = Director.GetPlayerParticipant();
+	const AActor* PlayerActor = Player ? Player->GetOwner() : nullptr;
+
+	// No player is not an error - a level can be opened without one - but there is then nothing
+	// for the crowd to watch, so every stand sits at the baseline for the race state.
+	if (!PlayerActor)
 	{
-	case ERaceState::Countdown: Base = CountdownExcitement; break;
-	case ERaceState::Racing:    Base = RacingExcitement;    break;
-	case ERaceState::Finished:  Base = FinishExcitement;    break;
-	default:                    Base = IdleExcitement;      break;
+		return Focus;
 	}
 
+	Focus.bValid = true;
+	Focus.Location = PlayerActor->GetActorLocation();
+	Focus.SpeedFactor = FMath::Clamp(FMath::Abs(Player->Progress.ForwardSpeed) / ExcitingSpeed, 0.0f, 1.0f);
+
+	// measured along the track rather than through the air: a car on the far side of a hairpin is
+	// metres away and not racing the player at all
+	for (const URaceParticipantComponent* Other : Director.GetParticipantsByPosition())
+	{
+		if (!Other || Other == Player || !Other->GetOwner())
+		{
+			continue;
+		}
+
+		if (FMath::Abs(Other->Progress.TotalDistance - Player->Progress.TotalDistance) < BattleGap)
+		{
+			Focus.bInBattle = true;
+			break;
+		}
+	}
+
+	return Focus;
+}
+
+float URaceCrowdSubsystem::ComputeLocalExcitement(const ARaceCrowdStand& Stand, float Base, const FPlayerFocus& Focus) const
+{
+	if (!Focus.bValid)
+	{
+		return FMath::Clamp(Base + EventPulse, 0.0f, 1.0f);
+	}
+
+	// to the nearest seat, not to the actor. On a hundred metres of grandstand the origin can be
+	// fifty metres from the part the player is actually passing, which would have the far end
+	// reacting and the near end ignoring them
 	const float Radius = FMath::Max(Stand.ReactionRadius, 1.0f);
+	const float Distance = FVector::Dist(Focus.Location, Stand.GetClosestPointTo(Focus.Location));
 
-	// what is in front of this stand right now: the closest car, how fast it is going, and
-	// whether anyone is close enough behind it to be a fight rather than a procession
-	float BestProximity = 0.0f;
-	float BestSpeedFactor = 0.0f;
-	float BestDistanceAlong = 0.0f;
-	bool bFoundCar = false;
-
-	TArray<URaceParticipantComponent*> Participants = Director.GetParticipantsByPosition();
-
-	for (const URaceParticipantComponent* Participant : Participants)
+	if (Distance > Radius)
 	{
-		const AActor* Owner = Participant ? Participant->GetOwner() : nullptr;
-
-		if (!Owner)
-		{
-			continue;
-		}
-
-		// to the nearest seat, not to the actor. On a hundred metres of grandstand the origin
-		// can be fifty metres from the part the car is actually passing, which would have the
-		// far end of the stand reacting and the near end ignoring it
-		const float Distance = FVector::Dist(Owner->GetActorLocation(), Stand.GetClosestPointTo(Owner->GetActorLocation()));
-
-		if (Distance > Radius)
-		{
-			continue;
-		}
-
-		const float Proximity = 1.0f - (Distance / Radius);
-
-		if (Proximity > BestProximity)
-		{
-			BestProximity = Proximity;
-			BestSpeedFactor = FMath::Clamp(FMath::Abs(Participant->Progress.ForwardSpeed) / ExcitingSpeed, 0.0f, 1.0f);
-			BestDistanceAlong = Participant->Progress.TotalDistance;
-			bFoundCar = true;
-		}
+		return FMath::Clamp(Base + EventPulse, 0.0f, 1.0f);
 	}
 
-	float Excitement = Base + PassBoost * BestProximity * BestSpeedFactor;
+	const float Proximity = 1.0f - (Distance / Radius);
 
-	if (bFoundCar)
+	// the product, not the sum: a car parked in front of the stand is not exciting, and a car at
+	// full speed two hundred metres away is not this stand's business
+	float Excitement = Base + PassBoost * Proximity * Focus.SpeedFactor;
+
+	if (Focus.bInBattle)
 	{
-		// measured along the track rather than through the air: two cars side by side on
-		// opposite sides of a hairpin are metres apart and not racing each other at all
-		for (const URaceParticipantComponent* Participant : Participants)
-		{
-			if (!Participant || !Participant->GetOwner())
-			{
-				continue;
-			}
-
-			const float Along = FMath::Abs(Participant->Progress.TotalDistance - BestDistanceAlong);
-
-			if (Along > KINDA_SMALL_NUMBER && Along < BattleGap)
-			{
-				Excitement += BattleBoost * BestProximity;
-				break;
-			}
-		}
+		Excitement += BattleBoost * Proximity;
 	}
 
 	return FMath::Clamp(Excitement + EventPulse, 0.0f, 1.0f);
 }
 
-void URaceCrowdSubsystem::DetectOvertakes(URaceDirectorSubsystem& Director)
+void URaceCrowdSubsystem::DetectPlayerPositionChange(URaceDirectorSubsystem& Director)
 {
-	for (URaceParticipantComponent* Participant : Director.GetParticipantsByPosition())
+	const URaceParticipantComponent* Player = Director.GetPlayerParticipant();
+
+	if (!Player || Player->bFinished)
 	{
-		if (!Participant || Participant->bFinished)
-		{
-			continue;
-		}
-
-		const int32 Position = Participant->Progress.Position;
-		const int32* Previous = LastPosition.Find(Participant);
-
-		// a position that improved means this car got past somebody. The car that lost the place
-		// reports the mirror of the same event, so only gains are counted or every pass is two
-		if (Previous && Position > 0 && Position < *Previous)
-		{
-			EventPulse = FMath::Min(EventPulse + EventPulseStrength, 1.0f);
-
-			if (const AActor* Owner = Participant->GetOwner())
-			{
-				ReactNearest(Owner->GetActorLocation(), 0.8f);
-			}
-		}
-
-		LastPosition.Add(Participant, Position);
+		return;
 	}
+
+	const int32 Position = Player->Progress.Position;
+
+	if (Position <= 0)
+	{
+		return;
+	}
+
+	// only the player's own places are events. An AI passing another AI three corners away is
+	// not something the driver saw, heard, or will ever know happened
+	if (LastPlayerPosition > 0 && Position != LastPlayerPosition)
+	{
+		const bool bGained = Position < LastPlayerPosition;
+		const float Scale = bGained ? 1.0f : OvertakenPulseScale;
+
+		EventPulse = FMath::Min(EventPulse + EventPulseStrength * Scale, 1.0f);
+
+		if (const AActor* Owner = Player->GetOwner())
+		{
+			ReactNearest(Owner->GetActorLocation(), bGained ? 0.9f : 0.5f);
+		}
+	}
+
+	LastPlayerPosition = Position;
 }
 
 void URaceCrowdSubsystem::ReactNearest(const FVector& Location, float Intensity)
@@ -274,28 +280,33 @@ void URaceCrowdSubsystem::ReactNearest(const FVector& Location, float Intensity)
 void URaceCrowdSubsystem::HandleRaceStarted()
 {
 	EventPulse = FMath::Min(EventPulse + EventPulseStrength, 1.0f);
-	LastPosition.Empty();
+	LastPlayerPosition = 0;
 }
 
 void URaceCrowdSubsystem::HandleRacerFinished(URaceParticipantComponent* Participant, int32 FinishPosition)
 {
-	// the winner is worth more than the rest of the field arriving afterwards
-	const float Intensity = FinishPosition <= 1 ? 1.0f : 0.6f;
+	// only the player crossing the line is an event. The AI arriving afterwards is bookkeeping,
+	// and cheering it while the driver is still out on track tells them a story about somebody
+	// else at the exact moment their own is still running
+	if (!Participant || !Participant->bIsPlayer)
+	{
+		return;
+	}
+
+	// winning is worth more than finishing
+	const float Intensity = FinishPosition <= 1 ? 1.0f : 0.7f;
 	EventPulse = FMath::Min(EventPulse + EventPulseStrength * Intensity, 1.0f);
 
-	if (Participant)
+	if (const AActor* Owner = Participant->GetOwner())
 	{
-		if (const AActor* Owner = Participant->GetOwner())
-		{
-			ReactNearest(Owner->GetActorLocation(), Intensity);
-		}
+		ReactNearest(Owner->GetActorLocation(), Intensity);
 	}
 }
 
 void URaceCrowdSubsystem::HandleRaceReset()
 {
 	EventPulse = 0.0f;
-	LastPosition.Empty();
+	LastPlayerPosition = 0;
 }
 
 void URaceCrowdSubsystem::LogState() const
