@@ -31,7 +31,8 @@ public class AI_Driving : ModuleRules
 			"AI_Driving/Variant_Offroad",
 			"AI_Driving/Variant_TimeTrial",
 			"AI_Driving/Variant_TimeTrial/UI",
-			"AI_Driving/VR"
+			"AI_Driving/VR",
+			"AI_Driving/Crowd"
 		});
 
 		// the race plugin: track respawn and the pre-start/post-race hold live on its participant
