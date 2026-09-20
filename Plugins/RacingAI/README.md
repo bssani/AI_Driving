@@ -29,9 +29,20 @@
 
 화면에 띄우고 기록으로 남길 숫자는 `GetPlayerTimeSeconds()`입니다.
 
-    Director->GetPlayerTimeSeconds()   달리는 동안 올라가고, 결승선을 넘는 순간 멈춘다
+    Director->GetPlayerTimeSeconds()   카운트다운부터 올라가고, 결승선을 넘는 순간 멈춘다
     Director->IsPlayerTimeRunning()    아직 움직이는지. 꺼지는 순간이 기록 확정
     PlayerParticipant->bFinished       기록으로 쓸 수 있는지
+
+**시계는 카운트다운이 시작될 때 돌기 시작합니다**(`bTimeFromCountdown`, 기본 켜짐).
+3-2-1이 기록에 들어갑니다. 손님마다 같은 카운트다운을 받으므로 순위 비교는 공평하고,
+"시작을 누른 순간부터 골인까지"가 운영자에게 가장 설명하기 쉬운 규칙입니다.
+
+**단, `StartCountdown`에 매번 다른 초를 넘기면 그 공평함이 깨집니다.** 3초로 시작한 손님과
+5초로 시작한 손님의 기록은 비교할 수 없습니다. 행사장에서는 한 값으로 고정하세요.
+출발 신호부터 재려면 `bTimeFromCountdown`을 끕니다.
+
+`RaceTimeLimitSeconds`도 같은 시계를 보므로 카운트다운이 제한 시간에 포함됩니다.
+3초 카운트다운에 120초 제한이면 주행에 쓸 수 있는 시간은 117초입니다.
 
 **`GetRaceElapsedSeconds()`를 그대로 쓰면 안 됩니다.** 그것은 레이스의 길이지 플레이어의
 기록이 아닙니다. 뒤에 오는 AI를 기다리는 동안에도 계속 올라가므로, 완주한 사람의 숫자가

@@ -241,7 +241,12 @@ bool URaceDirectorSubsystem::IsPlayerTimeRunning() const
 {
 	const URaceParticipantComponent* Player = GetPlayerParticipant();
 
-	return RaceState == ERaceState::Racing
+	// 카운트다운부터 재는 설정이면 그동안에도 숫자가 올라가므로, 멈춰 있다고 답하면
+	// 화면과 어긋납니다
+	const bool bClockRunning = RaceState == ERaceState::Racing
+		|| (bTimeFromCountdown && RaceState == ERaceState::Countdown);
+
+	return bClockRunning
 		&& Player != nullptr
 		&& !Player->bFinished
 		&& !Player->bDidNotFinish;
@@ -284,6 +289,13 @@ void URaceDirectorSubsystem::StartCountdown(float Seconds)
 	RaceState = ERaceState::Countdown;
 	CountdownRemaining = FMath::Max(0, FMath::CeilToInt(Seconds));
 
+	// 기록을 여기서부터 잽니다. 손님에게는 카운트다운이 이미 체험의 일부이고, 운영자에게는
+	// "시작을 누른 순간부터"가 가장 설명하기 쉬운 규칙입니다.
+	if (bTimeFromCountdown)
+	{
+		RaceStartTimeSeconds = World->GetTimeSeconds();
+	}
+
 	OnCountdownStarted.Broadcast();
 	OnCountdownTick.Broadcast(CountdownRemaining);
 
@@ -320,7 +332,13 @@ void URaceDirectorSubsystem::StartRace()
 	if (World)
 	{
 		World->GetTimerManager().ClearTimer(CountdownTimer);
-		RaceStartTimeSeconds = World->GetTimeSeconds();
+
+		// 카운트다운이 이미 시계를 돌렸으면 건드리지 않습니다. 여기서 다시 찍으면 방금 센
+		// 3초가 사라집니다. 카운트다운 없이 곧바로 출발했을 때만 여기가 0입니다.
+		if (RaceStartTimeSeconds <= 0.f)
+		{
+			RaceStartTimeSeconds = World->GetTimeSeconds();
+		}
 	}
 
 	RaceState = ERaceState::Racing;
@@ -368,6 +386,11 @@ void URaceDirectorSubsystem::AbortRace()
 	}
 
 	RaceState = ERaceState::Aborted;
+
+	// 중단된 카운트다운이 시계를 남겨 두면 다음 판이 그 시각부터 이어서 셉니다
+	RaceStartTimeSeconds = 0.f;
+	RaceEndElapsedSeconds = 0.f;
+
 	HoldAtGrid();
 
 	UE_LOG(LogRacingAI, Log, TEXT("레이스 중단"));
