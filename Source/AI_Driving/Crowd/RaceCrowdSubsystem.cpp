@@ -6,7 +6,7 @@
 #include "Engine/World.h"
 #include "GameFramework/Actor.h"
 
-DEFINE_LOG_CATEGORY_STATIC(LogRaceCrowd, Log, All);
+DEFINE_LOG_CATEGORY(LogRaceCrowd);
 
 URaceCrowdSubsystem* URaceCrowdSubsystem::Get(const UObject* WorldContext)
 {

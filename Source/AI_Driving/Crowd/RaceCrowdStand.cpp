@@ -7,7 +7,6 @@
 #include "Engine/Attenuation.h"
 #include "Engine/World.h"
 
-DEFINE_LOG_CATEGORY_STATIC(LogRaceCrowd, Log, All);
 
 ARaceCrowdStand::ARaceCrowdStand()
 {

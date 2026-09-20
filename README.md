@@ -110,9 +110,28 @@ racing.Calibrate 0      -- 결과와 세 프로파일 권장값 출력
     vr.SpectatorProbe   빨간 배너를 AddToViewport로  →  헤드셋에만 보인다
     vr.SpectatorUI      초록 배너를 렌더타겟으로     →  모니터에만 보인다
 
-관객에게 무언가 보여주려면 `UVRSpectatorUISubsystem::ShowSpectatorWidget`을 쓴다. 위젯을
-렌더타겟에 그려 헤드셋의 스펙테이터 화면에 눈 이미지 위 오버레이로 넘기므로, 헤드셋에
-전달되는 장면에는 들어가지 않는다.
+관객에게 무언가 보여주려면 위젯을 렌더타겟에 그려 헤드셋의 스펙테이터 화면에 눈 이미지 위
+오버레이로 넘긴다. 헤드셋에 전달되는 장면에는 들어가지 않는다.
+
+**보통은 코드를 쓸 필요가 없다.** `Project Settings > Game > VR Spectator UI`의
+`Spectator Widget Class`에 위젯을 지정하면 레벨이 시작될 때 알아서 뜬다. 비워 두면 안 뜬다.
+
+    Project Settings > Game > VR Spectator UI > Spectator Widget Class
+
+메인 프로젝트에서 만든 위젯이면 콘텐츠 브라우저에서 우클릭 → Asset Actions → Migrate로
+이 프로젝트의 `Content`에 넘긴 뒤 지정한다. 부모가 `UserWidget` 직계여야 한다 — 메인
+프로젝트의 C++ 클래스를 상속했다면 그 클래스가 여기 없어서 로드되지 않는다.
+
+코드에서 직접 띄울 때:
+
+    UVRSpectatorUISubsystem* S = GetWorld()->GetSubsystem<UVRSpectatorUISubsystem>();
+    S->RequestSpectatorWidget(WidgetClass);   // 준비될 때까지 재시도
+    S->ShowSpectatorWidget(WidgetClass);      // 지금 한 번만 시도, 실패하면 false
+
+**`BeginPlay`에서 `ShowSpectatorWidget`을 부르면 대개 실패한다.** 그 시점에는 헤드셋도
+플레이어 컨트롤러도 아직 없다. 리센터가 `BeginPlay`에서 무시되는 것과 같은 함정이다.
+세션 내내 띄워 둘 것이라면 `RequestSpectatorWidget`을 쓴다 — 0.5초마다 30초까지 다시
+시도하고, 끝내 안 되면 이유를 로그에 남기고 포기한다(조용히 영원히 돌지 않는다).
 
 **소리는 실내와 실외가 다르다.** VehicleSoundSystem README의 "VR에서 쓸 때"를 참고.
 
@@ -202,9 +221,9 @@ Quest 2, 눈당 2080×2096(합계 8.7 MPix) 기준. 플랫 PIE에서 같은 픽�
 - **운전자용 HUD.** 이번 데모에서는 운전자에게 계기를 보여주지 않기로 했다. VR에서 읽을 수
   있는 것은 월드 스페이스 위젯뿐이므로, 필요해지면 대시보드에 붙인다. 스크린 스페이스 위젯은
   VR에서 뷰포트에 올리지 않는다 - 올리면 운전자 얼굴에 붙는다
-- **관객 화면 UI의 내용.** 띄우는 경로는 만들어 뒀다(`UVRSpectatorUISubsystem`). 무엇을
-  띄울지는 정해지지 않았다. 순위와 랩이 후보고, `RaceDirectorSubsystem`에 필요한 델리게이트가
-  모두 나와 있다
+- **관객 화면 UI의 내용.** 띄우는 경로와 프로젝트 설정 칸까지 만들어 뒀다. 무엇을 띄울지는
+  정해지지 않았다. 순위와 랩이 후보고, `RaceDirectorSubsystem`에 필요한 델리게이트가
+  모두 나와 있다. 위젯만 지정하면 뜬다
 - **스크레이프 사운드.** 접촉 정보가 오므로 기술적으로는 된다. 실제로 `MS_ScrapeSound`가
   울리고 있었고, 벽을 세우자마자 "이상한 소리"로 들렸다. 이번 데모에서는 충돌음 하나만
   쓰기로 하고 `DA_SportsCar_Dynamic`의 `ScrapeSound`를 비웠다. 되살리려면 그 칸에 다시

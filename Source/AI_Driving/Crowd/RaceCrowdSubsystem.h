@@ -8,6 +8,11 @@ class ARaceCrowdStand;
 class URaceDirectorSubsystem;
 class URaceParticipantComponent;
 
+/** Declared here and defined once, rather than DEFINE_LOG_CATEGORY_STATIC in both crowd files:
+ *  two static categories of the same name compile fine until a unity build puts the two
+ *  translation units together, and then neither of them exists */
+DECLARE_LOG_CATEGORY_EXTERN(LogRaceCrowd, Log, All);
+
 /**
  * Works out how excited the crowd is and drives every grandstand from it.
  *

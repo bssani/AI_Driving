@@ -32,9 +32,22 @@ class UVRSpectatorUISubsystem : public UTickableWorldSubsystem
 
 public:
 
-	/** Draws this widget on the spectator screen only. Replaces whatever was there */
+	/** Draws this widget on the spectator screen only. Replaces whatever was there.
+	 *  Returns false if it could not start right now - see RequestSpectatorWidget for the case
+	 *  where "right now" is too early */
 	UFUNCTION(BlueprintCallable, Category = "VR|Spectator")
 	bool ShowSpectatorWidget(TSubclassOf<UUserWidget> WidgetClass);
+
+	/** Asks for this widget and keeps asking until it can be drawn.
+	 *
+	 *  At BeginPlay there is usually neither a headset nor a player controller yet, and
+	 *  ShowSpectatorWidget simply fails - the same timing trap as recentering, which also cannot
+	 *  be done from BeginPlay. Anything wanting an overlay up for the whole session wants this.
+	 *
+	 *  Gives up after a while and says so, rather than retrying silently forever on a machine
+	 *  that has no headset attached. */
+	UFUNCTION(BlueprintCallable, Category = "VR|Spectator")
+	void RequestSpectatorWidget(TSubclassOf<UUserWidget> WidgetClass);
 
 	/** Clears the spectator overlay and hands the screen back to the plain eye image */
 	UFUNCTION(BlueprintCallable, Category = "VR|Spectator")
@@ -62,12 +75,25 @@ public:
 	virtual void Tick(float DeltaTime) override;
 	virtual TStatId GetStatId() const override { RETURN_QUICK_DECLARE_CYCLE_STAT(UVRSpectatorUISubsystem, STATGROUP_Tickables); }
 
-	/** Nothing to do at all while no overlay is up, so do not even be ticked */
-	virtual bool IsTickable() const override { return SpectatorWidget != nullptr; }
+	/** Nothing to do at all while no overlay is up and none is waiting, so do not even be ticked */
+	virtual bool IsTickable() const override { return SpectatorWidget != nullptr || PendingWidgetClass != nullptr; }
 	virtual void Deinitialize() override;
+
+	/** Puts up whatever the project settings ask for, once the world is actually running */
+	virtual void OnWorldBeginPlay(UWorld& InWorld) override;
 	// End UTickableWorldSubsystem interface
 
 private:
+	/** Keeps trying to start the pending widget. Returns whether anything is still pending */
+	void TickPendingRequest(float DeltaTime);
+
+	/** Asked for but not yet drawable */
+	UPROPERTY()
+	TSubclassOf<UUserWidget> PendingWidgetClass;
+
+	float PendingRetryCountdown = 0.f;
+	float PendingElapsed = 0.f;
+
 
 	/** The widget being drawn. Held so it can be ticked and torn down */
 	UPROPERTY()

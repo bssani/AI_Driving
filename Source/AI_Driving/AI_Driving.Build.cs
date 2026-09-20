@@ -36,8 +36,9 @@ public class AI_Driving : ModuleRules
 		});
 
 		// the race plugin: track respawn and the pre-start/post-race hold live on its participant
-		// component, and the brake reverse guard lives in its Chaos module
-		PrivateDependencyModuleNames.AddRange(new string[] { "RacingAI", "RacingAIChaos" });
+		// component, and the brake reverse guard lives in its Chaos module.
+		// DeveloperSettings carries UDeveloperSettings, which the spectator UI settings derive from
+		PrivateDependencyModuleNames.AddRange(new string[] { "RacingAI", "RacingAIChaos", "DeveloperSettings" });
 
 		// The hand tracking probe reports both routes into the runtime side by side. The Meta
 		// route is optional so that deleting the Meta XR plugin doesn't break the build.
