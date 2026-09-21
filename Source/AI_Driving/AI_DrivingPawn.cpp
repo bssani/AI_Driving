@@ -114,29 +114,17 @@ AAI_DrivingPawn::AAI_DrivingPawn()
 	RightGripHand->SetupAttachment(SteeringWheelMesh);
 	RightGripHand->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 
-	// These come from BP_SteeringBase in the asset pack rather than from guesswork: its authored
-	// hand pivot and mesh transforms composed down into one, with the grip points it uses at 18cm
-	// out from the hub. They only mean anything for that hand's pivot and bone orientation, so a
-	// different mesh will need its own numbers. The left scale of -1 on Z mirrors the right hand,
-	// since the pack ships no left one; a mesh that is already a left hand wants a scale of 1.
-	LeftGripHandOffset = FTransform(FRotator(2.44f, -11.39f, 29.26f), FVector(-10.16f, -15.43f, -1.72f), FVector(1.0f, 1.0f, -1.0f));
-	RightGripHandOffset = FTransform(FRotator(0.0f, 0.0f, -163.88f), FVector(10.16f, 15.46f, 2.48f), FVector::OneVector);
-
-	static ConstructorHelpers::FObjectFinder<USkeletalMesh> HandMesh(TEXT("/Game/VR_SteeringV2/VR_Steering/Hands/Mesh/SK_MannequinHand_Right.SK_MannequinHand_Right"));
-
-	if (HandMesh.Succeeded())
-	{
-		LeftGripHandMesh = HandMesh.Object;
-		RightGripHandMesh = HandMesh.Object;
-	}
-
-	static ConstructorHelpers::FObjectFinder<UAnimationAsset> GripPose(TEXT("/Game/VR_SteeringV2/VR_Steering/Hands/Animations/MannequinHand_Right_Grab.MannequinHand_Right_Grab"));
-
-	if (GripPose.Succeeded())
-	{
-		LeftGripHandPose = GripPose.Object;
-		RightGripHandPose = GripPose.Object;
-	}
+	// No mesh, no pose and no offset by default: the grip hands are set up in the vehicle
+	// Blueprint. Code that picks a hand for you is code that has to be undone before you can use
+	// your own, and a placement worked out for somebody else's hand is wrong for every other one
+	// - the pivot, the bone orientation and the finger spread all differ.
+	//
+	// For reference, the values that fitted the SK_MannequinHand_Right from the VR_SteeringV2
+	// pack, in case that hand is what you want back:
+	//   Left  rotation (2.44, -11.39, 29.26)  location (-10.16, -15.43, -1.72)  scale (1, 1, -1)
+	//   Right rotation (0, 0, -163.88)        location (10.16, 15.46, 2.48)     scale (1, 1, 1)
+	// The left scale of -1 on Z mirrors a right hand, which is what that pack needed because it
+	// ships no left one. A mesh that is already a left hand wants a scale of 1.
 
 	ApplyGripHandSetup();
 

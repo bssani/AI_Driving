@@ -139,9 +139,11 @@ protected:
 	/** Keeps track of which camera is active */
 	bool bFrontCameraActive = false;
 
-	/** Mesh shown in place of the driver's left hand while they hold the wheel. Leave it empty to
-	 *  show no hand on that side. Any skeletal mesh will do: nothing in code assumes the hand that
-	 *  ships with the steering asset pack */
+	/** Mesh shown in place of the driver's left hand while they hold the wheel.
+	 *
+	 *  Empty by default, and empty means no hand on that side. Any skeletal mesh will do - nothing
+	 *  in code assumes a particular hand, and nothing picks one for you. Set this, the offset and
+	 *  either an Animation Blueprint or a pose, in the vehicle Blueprint. */
 	UPROPERTY(EditAnywhere, Category="VR|Grip Hands")
 	TObjectPtr<USkeletalMesh> LeftGripHandMesh;
 
@@ -149,9 +151,13 @@ protected:
 	UPROPERTY(EditAnywhere, Category="VR|Grip Hands")
 	TObjectPtr<USkeletalMesh> RightGripHandMesh;
 
-	/** Where the left hand sits, relative to the steering wheel. A negative scale mirrors the
-	 *  mesh, which is what turns a right hand into a left one; set the scale to 1 when the mesh is
-	 *  already a left hand. The default mirrors, because the asset pack only ships a right hand */
+	/** Where the left hand sits, relative to the steering wheel.
+	 *
+	 *  Identity by default, which puts the hand at the wheel's own origin - it has to be placed by
+	 *  eye for whatever mesh is used, because the pivot and bone orientation differ from hand to
+	 *  hand. Turn on the hand presence component's debug draw to see the rim while positioning it.
+	 *
+	 *  A negative scale mirrors the mesh, which is what turns a right hand into a left one. */
 	UPROPERTY(EditAnywhere, Category="VR|Grip Hands")
 	FTransform LeftGripHandOffset;
 
