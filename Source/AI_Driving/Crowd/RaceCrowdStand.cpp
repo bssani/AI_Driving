@@ -150,7 +150,41 @@ void ARaceCrowdStand::EndPlay(const EEndPlayReason::Type EndPlayReason)
 void ARaceCrowdStand::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
+
 	TimeSinceReaction += DeltaTime;
+	TimeSinceRestartCheck += DeltaTime;
+
+	if (TimeSinceRestartCheck >= RestartCheckInterval)
+	{
+		TimeSinceRestartCheck = 0.0f;
+		RestartStoppedEmitters();
+	}
+}
+
+void ARaceCrowdStand::RestartStoppedEmitters()
+{
+	for (UAudioComponent* Emitter : Emitters)
+	{
+		// A virtualised sound still reports itself as playing, so this does not fight the audio
+		// engine over a bed that is merely inaudible - only over one that was actually stopped.
+		if (!Emitter || Emitter->IsPlaying())
+		{
+			continue;
+		}
+
+		if (!bReportedEmitterStopped)
+		{
+			bReportedEmitterStopped = true;
+
+			UE_LOG(LogRaceCrowd, Warning,
+				TEXT("%s: an emitter stopped on its own and was restarted. A crowd bed is meant to ")
+				TEXT("run for the whole session, so this is usually a concurrency limit or voice ")
+				TEXT("stealing taking the voice away. If it keeps happening, give the crowd its own ")
+				TEXT("concurrency or use fewer emitters per stand."), *GetName());
+		}
+
+		Emitter->Play();
+	}
 }
 
 FVector ARaceCrowdStand::GetClosestPointTo(const FVector& World) const

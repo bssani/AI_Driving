@@ -89,6 +89,19 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Crowd", meta = (Units = "cm", ClampMin = "100.0"))
 	float ReactionRadius = 4000.0f;
 
+	/** How often the emitters are checked for having fallen silent on their own.
+	 *
+	 *  A bed is meant to run for the whole session, but an audio component can be stopped out from
+	 *  under it - concurrency limits and voice stealing both do it - and nothing tells the actor.
+	 *  The emitter is then alive and silent, which is the one state that never recovers by itself,
+	 *  and the stand sounds like it played once and gave up. The vehicle sound plugin carries the
+	 *  same guard for the same reason.
+	 *
+	 *  Checked on an interval rather than every frame: it is a rare fault and there are several
+	 *  emitters per stand. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Crowd", meta = (Units = "s", ClampMin = "0.1"))
+	float RestartCheckInterval = 1.0f;
+
 	/** Shortest gap between two one-shots from this stand. Without it a pack of cars crossing in
 	 *  front fires one per car per frame, which is applause rather than a reaction */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Crowd", meta = (Units = "s", ClampMin = "0.0"))
@@ -123,12 +136,20 @@ private:
 	/** Builds the emitters along the spline. Called once, at BeginPlay */
 	void CreateEmitters();
 
+	/** Restarts any emitter that has stopped on its own */
+	void RestartStoppedEmitters();
+
 	UPROPERTY()
 	TArray<TObjectPtr<UAudioComponent>> Emitters;
 
 	float Excitement = 0.0f;
 	float TimeSinceReaction = 0.0f;
+	float TimeSinceRestartCheck = 0.0f;
 
-	/** Ticking only to age the reaction rate limit; the beds are driven from the subsystem */
+	/** So a stand that keeps losing its voices says so once rather than every second */
+	bool bReportedEmitterStopped = false;
+
+	/** Ticking to age the reaction rate limit and to notice an emitter that has gone silent;
+	 *  the beds themselves are driven from the subsystem */
 	virtual void Tick(float DeltaTime) override;
 };
