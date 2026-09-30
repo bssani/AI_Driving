@@ -35,6 +35,16 @@ struct RACINGAI_API FRaceGridSlot
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Racing AI")
 	FText DriverName;
 
+	/**
+	 * 리더보드에 이름과 함께 보여 줄 이미지입니다. 국기나 팀 로고.
+	 *
+	 * 도색이 아니라 이 자리에 붙어 있으므로, 도색을 무작위로 돌려도 이미지는 그대로입니다.
+	 * 텍스처나, Material Domain이 User Interface인 머티리얼을 넣으세요. 차체 머티리얼은
+	 * Surface 도메인이라 UI에 그려지지 않습니다.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Racing AI", meta = (AllowedClasses = "/Script/Engine.Texture2D,/Script/Engine.MaterialInterface"))
+	TObjectPtr<UObject> Emblem = nullptr;
+
 	/** 중심선 기준 좌우 오프셋 (cm). 오른쪽이 양수 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Racing AI")
 	float LaneOffset = 0.f;

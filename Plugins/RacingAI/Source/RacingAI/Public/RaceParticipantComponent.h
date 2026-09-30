@@ -45,6 +45,10 @@ public:
 	UPROPERTY(BlueprintReadOnly, Category = "Racing AI")
 	FLinearColor LiveryColor = FLinearColor::White;
 
+	/** 리더보드에 이름과 함께 보여 줄 이미지입니다. 국기나 팀 로고. 그리드 자리에서 옵니다 */
+	UPROPERTY(BlueprintReadWrite, Category = "Racing AI")
+	TObjectPtr<UObject> Emblem = nullptr;
+
 	/** 현재 트랙 진행 상태입니다. Director가 갱신합니다 */
 	UPROPERTY(BlueprintReadOnly, Category = "Racing AI")
 	FRaceProgress Progress;

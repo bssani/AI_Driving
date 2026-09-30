@@ -319,6 +319,7 @@ APawn* ARaceGridSpawner::SpawnAIVehicle(const FRaceGridSlot& Slot, const FTransf
 			: Slot.DriverName;
 
 		AI->Configure(Profile, Slot.LaneOffset, Name);
+		AI->Emblem = Slot.Emblem;
 
 		ResolveAndApplyLivery(*Vehicle, *AI, Slot, Stream);
 	}
@@ -389,6 +390,7 @@ void ARaceGridSpawner::RetryPlacePlayer()
 	Participant->DisplayName = PendingPlayerSlot.DriverName.IsEmpty()
 		? NSLOCTEXT("RacingAI", "PlayerDriverName", "Player")
 		: PendingPlayerSlot.DriverName;
+	Participant->Emblem = PendingPlayerSlot.Emblem;
 
 	// 사람이 타는 차는 게임모드가 이미 스폰했으므로, 그리드 자리로 옮기기만 합니다.
 	PlayerPawn->SetActorTransform(PendingPlayerTransform, false, nullptr, ETeleportType::TeleportPhysics);
