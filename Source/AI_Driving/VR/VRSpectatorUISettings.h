@@ -37,4 +37,14 @@ public:
 	 */
 	UPROPERTY(config, EditAnywhere, BlueprintReadOnly, Category = "Spectator Screen", meta = (AllowAbstract = "false"))
 	TSoftClassPtr<UUserWidget> SpectatorWidgetClass;
+
+	/**
+	 *  How often the overlay is redrawn, in times per second.
+	 *
+	 *  A widget drawn this way is only ticked when it is drawn, so this is also the frame rate of
+	 *  anything that moves on it. 15 did while the overlay held numbers that change a few times a
+	 *  race; the rank board slides its rows, and at 15 the slide is visibly stepped.
+	 */
+	UPROPERTY(config, EditAnywhere, BlueprintReadOnly, Category = "Spectator Screen", meta = (ClampMin = "1.0", ClampMax = "120.0"))
+	float RedrawsPerSecond = 30.f;
 };

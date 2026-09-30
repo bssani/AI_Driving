@@ -67,7 +67,10 @@ public:
 	 *  Deliberately not once per frame. A lap counter and a position change a few times a race and
 	 *  a speed readout is unreadable faster than the eye can follow, so redrawing at the headset's
 	 *  refresh rate spends most of its work on frames nobody can tell apart. The audience cannot
-	 *  see the difference between this and 90; the frame budget can. */
+	 *  see the difference between this and 90; the frame budget can.
+	 *
+	 *  Taken from the project settings when the world begins play, since anything that moves on
+	 *  the overlay needs more than this. Set it here to override that for one session. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "VR|Spectator", meta = (ClampMin = "1.0"))
 	float RedrawsPerSecond = 15.f;
 

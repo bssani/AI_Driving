@@ -5,6 +5,7 @@
 #include "Engine/Engine.h"
 #include "Engine/World.h"
 #include "GameFramework/PlayerController.h"
+#include "VRSpectatorUISettings.h"
 #include "VRSpectatorUISubsystem.h"
 
 /**
@@ -93,4 +94,52 @@ namespace
 		TEXT("vr.SpectatorUI"),
 		TEXT("Toggles the same banners drawn onto the spectator screen rather than the viewport. Compare with vr.SpectatorProbe."),
 		FConsoleCommandWithWorldArgsAndOutputDeviceDelegate::CreateStatic(&ToggleSpectatorUI));
+
+	/**
+	 *  vr.SpectatorPreview puts the widget the project settings name for the spectator screen on
+	 *  the viewport instead. Without a headset there is no spectator screen, so this is the only
+	 *  way to see that widget working while building it.
+	 */
+	TWeakObjectPtr<UUserWidget> GSpectatorPreviewWidget;
+
+	void ToggleSpectatorPreview(const TArray<FString>& Args, UWorld* World, FOutputDevice& Ar)
+	{
+		if (GSpectatorPreviewWidget.IsValid())
+		{
+			GSpectatorPreviewWidget->RemoveFromParent();
+			GSpectatorPreviewWidget.Reset();
+			Ar.Log(TEXT("vr.SpectatorPreview: off."));
+			return;
+		}
+
+		APlayerController* Controller = World ? World->GetFirstPlayerController() : nullptr;
+
+		if (!Controller)
+		{
+			Ar.Log(TEXT("vr.SpectatorPreview: no player controller. Run this while playing."));
+			return;
+		}
+
+		const TSoftClassPtr<UUserWidget>& WidgetClass = GetDefault<UVRSpectatorUISettings>()->SpectatorWidgetClass;
+		UUserWidget* Widget = CreateWidget<UUserWidget>(Controller, WidgetClass.LoadSynchronous());
+
+		if (!Widget)
+		{
+			Ar.Logf(TEXT("vr.SpectatorPreview: could not create '%s'. Set it under Project Settings > Game > VR Spectator UI."),
+				*WidgetClass.ToString());
+			return;
+		}
+
+		Widget->AddToViewport(1000);
+		GSpectatorPreviewWidget = Widget;
+
+		// the viewport route reaches the headset, which is exactly what the spectator screen avoids
+		Ar.Logf(TEXT("vr.SpectatorPreview: on, showing '%s' on the viewport. In a headset the driver sees this too."),
+			*Widget->GetClass()->GetName());
+	}
+
+	FAutoConsoleCommandWithWorldArgsAndOutputDevice GSpectatorPreviewCommand(
+		TEXT("vr.SpectatorPreview"),
+		TEXT("Toggles the spectator screen widget from the project settings on the viewport, to check it without a headset."),
+		FConsoleCommandWithWorldArgsAndOutputDeviceDelegate::CreateStatic(&ToggleSpectatorPreview));
 }

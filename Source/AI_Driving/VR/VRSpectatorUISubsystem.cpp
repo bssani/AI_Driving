@@ -119,6 +119,8 @@ void UVRSpectatorUISubsystem::OnWorldBeginPlay(UWorld& InWorld)
 
 	const UVRSpectatorUISettings* Settings = GetDefault<UVRSpectatorUISettings>();
 
+	RedrawsPerSecond = Settings->RedrawsPerSecond;
+
 	if (Settings->SpectatorWidgetClass.IsNull())
 	{
 		return;
