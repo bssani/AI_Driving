@@ -239,9 +239,23 @@ public:
 	bool IsRaceStarted() const { return RaceState == ERaceState::Racing; }
 
 	/** 출발 이후 경과 시간 (초). 시작 전이면 0이고, **레이스가 끝나면 그 시점에서 멈춥니다.**
-	 *  깃발이 내려간 뒤로도 계속 세는 시계는 무엇의 경과 시간도 아닙니다 */
+	 *  깃발이 내려간 뒤로도 계속 세는 시계는 무엇의 경과 시간도 아닙니다.
+	 *
+	 *  `bTimeFromCountdown`이 켜져 있으면 카운트다운을 포함합니다. **기록용 시계입니다** —
+	 *  출발 신호부터 몇 초가 지났는지가 필요하면 `GetRacingSeconds()`를 쓰세요 */
 	UFUNCTION(BlueprintPure, Category = "Racing AI|Race")
 	float GetRaceElapsedSeconds() const;
+
+	/**
+	 * 출발 신호 이후 경과 시간 (초). 카운트다운은 포함하지 않습니다.
+	 *
+	 * 주행 동작의 기준입니다. 기록 시계와 분리된 이유는 둘이 세는 대상이 다르기 때문입니다 —
+	 * 기록은 손님의 체험 길이이고, 이쪽은 차가 실제로 굴러간 시간입니다. 카운트다운을 기록에
+	 * 넣기로 하면서 둘을 같은 시계로 두면, 그리드에서 라인으로 옮겨 가는 것 같은 "출발 후
+	 * 몇 초" 동작이 신호가 떨어지기 전에 이미 진행된 상태가 됩니다.
+	 */
+	UFUNCTION(BlueprintPure, Category = "Racing AI|Race")
+	float GetRacingSeconds() const;
 
 	/**
 	 * 기록 시계를 카운트다운이 시작될 때부터 돌립니다. 끄면 출발 신호부터입니다.
@@ -458,6 +472,9 @@ private:
 
 	/** 레이스가 끝난 시점의 경과 시간. 끝난 뒤 GetRaceElapsedSeconds가 돌려주는 값입니다 */
 	float RaceEndElapsedSeconds = 0.f;
+
+	/** 출발 신호가 떨어진 월드 시각. 주행 동작의 기준이며 카운트다운과 무관합니다 */
+	float GreenLightTimeSeconds = 0.f;
 	int32 CountdownRemaining = 0;
 
 	FTimerHandle CountdownTimer;

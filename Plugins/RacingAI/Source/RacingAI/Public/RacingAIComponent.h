@@ -78,6 +78,16 @@ public:
 	UPROPERTY(BlueprintReadOnly, Category = "Racing AI|Director")
 	float SpeedScale = 1.f;
 
+	/**
+	 * 이 차가 이번 판에서 낼 페이스. 프로필의 PaceVariance로 한 번 뽑습니다.
+	 *
+	 * 러버밴딩과 따로 두는 이유는 뜻이 다르기 때문입니다 — 러버밴딩은 플레이어와의 거리에
+	 * 반응해 매 프레임 움직이는 보정이고, 이쪽은 "오늘 이 드라이버의 컨디션"으로 판이
+	 * 끝날 때까지 움직이지 않습니다.
+	 */
+	UPROPERTY(BlueprintReadOnly, Category = "Racing AI|Director")
+	float PaceScale = 1.f;
+
 	/** 배정된 목표 차선 오프셋 (cm) */
 	UPROPERTY(BlueprintReadOnly, Category = "Racing AI|Director")
 	float TargetLaneOffset = 0.f;
@@ -154,6 +164,9 @@ public:
 	 * 엉뚱한 조향이 나옵니다.
 	 */
 	void ResetForNewRace(float InLaneOffset);
+
+	/** 이번 판의 페이스를 다시 뽑습니다. 레이스가 시작될 때마다 불립니다 */
+	void RollPaceForNewRace();
 
 	/** 유효한 프로필을 반환합니다. Profile이 비어 있으면 기본 인스턴스를 만듭니다 */
 	const URacingAIProfile& GetEffectiveProfile() const;

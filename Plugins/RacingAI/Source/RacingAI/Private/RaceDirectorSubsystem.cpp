@@ -218,6 +218,24 @@ float URaceDirectorSubsystem::GetRaceElapsedSeconds() const
 	return World->GetTimeSeconds() - RaceStartTimeSeconds;
 }
 
+float URaceDirectorSubsystem::GetRacingSeconds() const
+{
+	const UWorld* World = GetWorld();
+
+	if (!World || GreenLightTimeSeconds <= 0.f)
+	{
+		return 0.f;
+	}
+
+	// 끝난 뒤에는 멈춥니다. 기록 시계와 같은 이유입니다
+	if (RaceState == ERaceState::Finished)
+	{
+		return FMath::Max(RaceEndElapsedSeconds - (GreenLightTimeSeconds - RaceStartTimeSeconds), 0.f);
+	}
+
+	return World->GetTimeSeconds() - GreenLightTimeSeconds;
+}
+
 float URaceDirectorSubsystem::GetPlayerTimeSeconds() const
 {
 	const URaceParticipantComponent* Player = GetPlayerParticipant();
@@ -339,6 +357,10 @@ void URaceDirectorSubsystem::StartRace()
 		{
 			RaceStartTimeSeconds = World->GetTimeSeconds();
 		}
+
+		// 이쪽은 조건 없이 지금입니다. 깃발이 떨어진 순간이고, 카운트다운을 기록에 넣든 말든
+		// 차가 굴러가기 시작한 시각은 하나뿐입니다
+		GreenLightTimeSeconds = World->GetTimeSeconds();
 	}
 
 	RaceState = ERaceState::Racing;
@@ -390,6 +412,7 @@ void URaceDirectorSubsystem::AbortRace()
 	// 중단된 카운트다운이 시계를 남겨 두면 다음 판이 그 시각부터 이어서 셉니다
 	RaceStartTimeSeconds = 0.f;
 	RaceEndElapsedSeconds = 0.f;
+	GreenLightTimeSeconds = 0.f;
 
 	HoldAtGrid();
 
@@ -561,6 +584,7 @@ void URaceDirectorSubsystem::ResetRace()
 	FinishedCount = 0;
 	RaceStartTimeSeconds = 0.f;
 	RaceEndElapsedSeconds = 0.f;
+	GreenLightTimeSeconds = 0.f;
 	CountdownRemaining = 0;
 
 	HoldAtGrid();
@@ -893,8 +917,10 @@ void URaceDirectorSubsystem::ArbitrateOvertaking()
 		// 가운데가 비어 있어도 경기 내내 왼쪽만 달립니다.
 		//
 		// 다만 출발 직후에는 아직 세로로 벌어지지 않았으므로, 몇 초에 걸쳐 옮겨 갑니다.
+		// 기록 시계가 아니라 출발 신호 기준입니다. 기록이 카운트다운부터 세기 때문에, 저쪽을
+		// 쓰면 3초 카운트다운에 5초 홀드일 때 깃발이 떨어지는 순간 이미 60% 모여 있습니다
 		const float GridBlend = P.GridLaneHoldSeconds > 0.f
-			? FMath::Clamp(GetRaceElapsedSeconds() / P.GridLaneHoldSeconds, 0.f, 1.f)
+			? FMath::Clamp(GetRacingSeconds() / P.GridLaneHoldSeconds, 0.f, 1.f)
 			: 1.f;
 
 		const float HomeLane = FMath::Lerp(AI->BaseLaneOffset, P.RacingLineOffset, GridBlend);

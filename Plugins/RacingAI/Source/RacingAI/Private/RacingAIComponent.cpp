@@ -98,7 +98,23 @@ void URacingAIComponent::Configure(URacingAIProfile* InProfile, float InLaneOffs
 	CurrentLaneOffset = InLaneOffset;
 	TargetLaneOffset = InLaneOffset;
 
+	RollPaceForNewRace();
 	ResolveVehicleInput();
+}
+
+void URacingAIComponent::RollPaceForNewRace()
+{
+	const URacingAIProfile& P = GetEffectiveProfile();
+
+	if (P.PaceVariance <= 0.f)
+	{
+		PaceScale = 1.f;
+		return;
+	}
+
+	// 판마다 한 번. 매 프레임 흔들면 페이스가 아니라 떨림이 되고, 플레이어는 앞차가 왜
+	// 느려졌다 빨라졌다 하는지 알 수 없습니다
+	PaceScale = 1.f + FMath::FRandRange(-P.PaceVariance, P.PaceVariance);
 }
 
 void URacingAIComponent::EnterWaiting()
@@ -155,6 +171,8 @@ void URacingAIComponent::ResetForNewRace(float InLaneOffset)
 	TargetSpeed = 0.f;
 	FreeTargetSpeed = 0.f;
 	SpeedScale = 1.f;
+
+	RollPaceForNewRace();
 
 	StuckTimer = 0.f;
 	ReverseTimer = 0.f;
@@ -338,6 +356,10 @@ void URacingAIComponent::ComputeSpeedControl(const ARacingSpline& Track, float D
 
 	// 러버밴딩. Director가 산출한 계수를 여기서 한 번만 곱합니다.
 	Target *= SpeedScale;
+
+	// 이번 판 이 차의 페이스. 같은 프로필을 쓰는 차들이 똑같이 달리면 등수가 그리드 순서로
+	// 고정되므로, 판마다 한 번 뽑은 계수로 흩뜨립니다
+	Target *= PaceScale;
 
 	// 앞차를 고려하기 전의 속도를 남겨 둡니다. Director의 추월 판단이 이 값을 기준으로
 	// 삼아야, 앞차 때문에 멈춘 순간 판정이 뒤집히는 일이 없습니다.
