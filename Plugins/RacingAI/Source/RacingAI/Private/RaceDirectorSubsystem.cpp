@@ -889,6 +889,10 @@ void URaceDirectorSubsystem::ArbitrateOvertaking()
 	// 같은 대상을 향해 이미 어느 쪽이 점유됐는지 기록합니다.
 	TMap<const URaceParticipantComponent*, float> ClaimedSides;
 
+	// 이번 프레임에 레이싱 라인을 가져가기로 한 차들이 그때 있던 지점입니다. 앞선 차부터
+	// 돌기 때문에, 뒤차는 앞차의 선택을 보고 자기 차선에 머무르게 됩니다.
+	TArray<float> RacingLineClaims;
+
 	const float HalfWidth = Track->TrackHalfWidth;
 
 	for (const TObjectPtr<URacingAIComponent>& AI : Ordered)
@@ -916,14 +920,54 @@ void URaceDirectorSubsystem::ArbitrateOvertaking()
 		// 집으로 삼으면 추월을 마친 차가 매번 원래 차선으로 되돌아가, 왼쪽에서 출발한 차는
 		// 가운데가 비어 있어도 경기 내내 왼쪽만 달립니다.
 		//
-		// 다만 출발 직후에는 아직 세로로 벌어지지 않았으므로, 몇 초에 걸쳐 옮겨 갑니다.
-		// 기록 시계가 아니라 출발 신호 기준입니다. 기록이 카운트다운부터 세기 때문에, 저쪽을
-		// 쓰면 3초 카운트다운에 5초 홀드일 때 깃발이 떨어지는 순간 이미 60% 모여 있습니다
-		const float GridBlend = P.GridLaneHoldSeconds > 0.f
-			? FMath::Clamp(GetRacingSeconds() / P.GridLaneHoldSeconds, 0.f, 1.f)
-			: 1.f;
+		// 다만 옮겨 가도 되는지는 시간이 아니라 옆자리의 공백으로 판단합니다. 출발 직후에는
+		// 라인이 비어 있는 것이 맞지만 전부 비어 있는 그곳으로 동시에 들어가므로, "라인이
+		// 비었는가"를 물으면 다 같이 몰려 서로를 받습니다. 물어야 하는 것은 "내 옆자리가
+		// 비었는가"입니다.
+		const float ClearGap = FMath::Max(P.LaneChangeClearGap, 1.f);
+		bool bLineFree = true;
 
-		const float HomeLane = FMath::Lerp(AI->BaseLaneOffset, P.RacingLineOffset, GridBlend);
+		// 이미 라인을 쓰고 있는 차가 내 옆에 있는가. 플레이어도 포함됩니다 — 사람이 라인에
+		// 있을 때 AI가 밀고 들어오면 그것은 레이싱이 아니라 사고입니다
+		for (const TObjectPtr<URaceParticipantComponent>& Other : Participants)
+		{
+			if (!Other || Other == AI)
+			{
+				continue;
+			}
+
+			if (FMath::Abs(Other->Progress.TotalDistance - AI->Progress.TotalDistance) >= ClearGap)
+			{
+				continue;
+			}
+
+			if (FMath::Abs(Other->Progress.LateralOffset - P.RacingLineOffset) < P.PassingLateralClearance)
+			{
+				bLineFree = false;
+				break;
+			}
+		}
+
+		// 아직 라인에 없지만 이번 프레임에 들어가기로 한 앞차가 내 옆에 있는가. 이것이 없으면
+		// 같은 줄의 두 대가 서로 "비어 있다"고 판단해 동시에 들어갑니다
+		if (bLineFree)
+		{
+			for (const float Claim : RacingLineClaims)
+			{
+				if (FMath::Abs(Claim - AI->Progress.TotalDistance) < ClearGap)
+				{
+					bLineFree = false;
+					break;
+				}
+			}
+		}
+
+		if (bLineFree)
+		{
+			RacingLineClaims.Add(AI->Progress.TotalDistance);
+		}
+
+		const float HomeLane = bLineFree ? P.RacingLineOffset : AI->BaseLaneOffset;
 
 		float Desired = HomeLane;
 		bool bPass = false;

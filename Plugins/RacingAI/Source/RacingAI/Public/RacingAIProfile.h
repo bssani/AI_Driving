@@ -99,13 +99,20 @@ public:
 	float RacingLineOffset = 0.f;
 
 	/**
-	 * 출발 후 그리드 차선에서 라인으로 옮겨 가는 데 걸리는 시간 (초).
+	 * 레이싱 라인으로 옮겨 가기 전에 옆자리에 있어야 하는 앞뒤 여유 (cm).
 	 *
-	 * 0이면 출발 신호와 동시에 전부 한 줄로 몰려 서로를 받습니다. 세로로 벌어질 틈을 준 뒤
-	 * 모이도록 몇 초를 둡니다.
+	 * 출발 직후에는 전부 세로로 몰려 있으므로, "라인이 비었는가"만 보면 다 같이 비어 있는
+	 * 가운데로 몰려 서로를 받습니다. 비어 있는 것은 맞지만 동시에 들어가면 안 되기 때문입니다.
+	 *
+	 * 그래서 보는 것은 라인의 공백이 아니라 **내 옆자리의 공백**입니다. 이 거리 안에 라인을
+	 * 쓰고 있거나 쓰겠다고 정한 차가 있으면 자기 그리드 차선에 머물고, 세로로 벌어진 뒤에
+	 * 옮겨 갑니다. 판단은 앞선 차부터 하므로 자연히 한 대씩 줄지어 들어갑니다.
+	 *
+	 * 그리드 줄 간격(스포너의 RowSpacing, 기본 900)보다 조금 크게 두세요. 작으면 같은 줄의
+	 * 옆 차가 서로를 막지 못해 출발과 동시에 둘이 같이 들어갑니다.
 	 */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Steering", meta = (ClampMin = "0.0"))
-	float GridLaneHoldSeconds = 5.f;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Steering", meta = (Units = "cm", ClampMin = "0.0"))
+	float LaneChangeClearGap = 1000.f;
 
 	//--------------------------------------------------------------------------
 	// 속도
@@ -147,11 +154,13 @@ public:
 	 * 값은 레이스가 시작될 때 차마다 한 번 뽑고 그 판 내내 유지됩니다. 매 프레임 흔들면
 	 * 페이스가 아니라 떨림이 되고, 플레이어는 앞차가 왜 느려졌는지 알 수 없습니다.
 	 *
-	 * 크게 둘수록 등수가 잘 섞이지만, 너무 크면 "Pro"가 Rookie보다 느린 판이 나와 난이도
-	 * 설정이 의미를 잃습니다. 697m 트랙 기준 5%는 랩당 2초쯤이라 2랩이면 순서가 바뀝니다.
+	 * 프로필 사이의 차이는 페이스로 단계당 8~12%쯤입니다(SpeedMargin 0.90/0.93/0.96, 코너
+	 * 예산 929/1171/1413 — 실측). 그래서 기본 15%는 Pro와 Rookie의 순서까지 뒤집을 수 있는
+	 * 크기이고, 그것이 의도입니다 — 매 판 다른 레이스를 보여 주는 것이 난이도 라벨을 지키는
+	 * 것보다 중요합니다. 라벨대로 줄을 세우고 싶으면 값을 내리세요.
 	 */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Speed", meta = (ClampMin = "0.0", ClampMax = "0.3"))
-	float PaceVariance = 0.05f;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Speed", meta = (ClampMin = "0.0", ClampMax = "0.5"))
+	float PaceVariance = 0.15f;
 
 	//--------------------------------------------------------------------------
 	// 추월
