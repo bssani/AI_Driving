@@ -613,6 +613,25 @@ SetTargetGear(-1 또는 1)     후진 탈출할 때만</pre>
     사람이 뒤처지면 AI가 살짝 천천히 가고, 사람이 앞서면 조금 더 빨리 달려요.
     행사장에서는 이 값이 재미를 가장 크게 좌우합니다. <code>0</code>으로 두면 봐주지 않아요.
   </div>
+
+  <h3>버튼 하나로 난이도 섞기 &mdash; Race Setup</h3>
+  <ol>
+    <li>플레이를 멈춘 상태에서 <strong>Tools &rarr; Race Setup</strong> 열기</li>
+    <li><strong>Easy</strong> / <strong>Medium</strong> / <strong>Difficult</strong> 중 하나 누르기</li>
+    <li>아래 상태줄에 &ldquo;적용&rdquo;이 뜨면 맵 저장하기</li>
+  </ol>
+  <div class="why">
+    <b>무엇이 바뀌나요?</b> Race Grid Spawner의 AI 칸에 있는 <strong>Profile</strong>만 순서대로 바뀌어요.
+    사람 칸, 이름, 도색, 차선은 그대로예요. AI 칸이 더 많으면 목록을 처음부터 다시 씁니다.
+    고른 조합이 지켜지도록 <strong>Randomize Profiles</strong>는 꺼져요. Ctrl+Z로 되돌릴 수 있어요.
+  </div>
+  <div class="why">
+    <b>조합 바꾸기.</b> 프로젝트 설정 &rarr; Game &rarr; <strong>Race Setup Presets</strong>에서 버튼마다 목록을 고쳐요.
+    처음 값은 Easy = Rookie&middot;Rookie&middot;Rookie&middot;Advanced,
+    Medium = Rookie&middot;Advanced&middot;Advanced&middot;Pro,
+    Difficult = Advanced&middot;Pro&middot;Pro&middot;Pro예요.
+    GridSpawner가 맵에 여러 개면 하나를 고른 다음 누르세요.
+  </div>
 </section>
 
 <section id="trouble">

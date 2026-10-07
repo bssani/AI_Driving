@@ -12,6 +12,7 @@
 |---|---|---|
 | `RacingAI` | Core, CoreUObject, Engine | AI 로직 전부. 차량 물리에 의존하지 않습니다 |
 | `RacingAIChaos` | + ChaosVehicles | Chaos 차량 연결 어댑터만 |
+| `RacingAIEditor` | + UnrealEd, Slate, ToolMenus | 에디터 전용. Race Setup 패널(AI 구성 프리셋). 패키징한 게임에는 들어가지 않습니다 |
 
 코어 모듈이 차량 물리를 모르기 때문에, Chaos가 아닌 물리로 옮길 때
 교체 대상은 `RacingAIChaos` 하나뿐입니다.
@@ -24,6 +25,28 @@
    `Vehicle Input Adapter Class`(`ChaosVehicleInputAdapter`)를 지정
 4. `Grid Slots`에 AI 대수만큼 칸을 추가하고 난이도 프로필을 배정
 5. `Draw Debug`를 켜고 Play
+
+## AI 구성 프리셋 (Race Setup)
+
+플레이 전에 **Tools > Race Setup**을 열고 Easy / Medium / Difficult 중 하나를 누르면
+GridSpawner의 AI 슬롯 `Profile`이 그 조합으로 바뀝니다. 바뀐 뒤 맵을 저장하세요.
+
+- 맵에 GridSpawner가 하나면 자동으로 씁니다. 여럿이면 하나를 선택하고 누릅니다
+- AI 슬롯의 `Profile`만 순서대로 바꿉니다. Player 슬롯, 이름, 도색, 차선은 그대로입니다
+- AI 슬롯이 목록보다 많으면 목록을 반복합니다
+- `bRandomizeProfiles`는 꺼집니다. 켜 두면 고른 조합을 무작위 풀이 덮어쓰기 때문입니다
+- Ctrl+Z로 되돌릴 수 있습니다. 플레이 중에는 버튼이 꺼집니다
+
+조합은 **Project Settings > Game > Race Setup Presets**에서 바꿉니다
+(`DefaultEditor.ini`에 저장). 기본값:
+
+| 버튼 | AI 순서 |
+|---|---|
+| Easy | Rookie, Rookie, Rookie, Advanced |
+| Medium | Rookie, Advanced, Advanced, Pro |
+| Difficult | Advanced, Pro, Pro, Pro |
+
+플레이어 차량은 건드리지 않으므로 어떤 플레이어 Pawn을 쓰는 프로젝트에서도 그대로 동작합니다.
 
 ## 기록 시간
 
