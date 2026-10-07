@@ -500,7 +500,11 @@ void AAI_DrivingPawn::DoThrottle(float ThrottleValue)
 	ChaosVehicleMovement->SetThrottleInput(ThrottleValue);
 
 	// reset the brake input
-	ChaosVehicleMovement->SetBrakeInput(0.0f);
+	const URaceParticipantComponent* Participant = FindComponentByClass<URaceParticipantComponent>();
+	if (!Participant || !Participant->IsPreStartRevvingAllowed())
+	{
+		ChaosVehicleMovement->SetBrakeInput(0.0f);
+	}
 }
 
 void AAI_DrivingPawn::DoBrake(float BrakeValue)
@@ -509,7 +513,11 @@ void AAI_DrivingPawn::DoBrake(float BrakeValue)
 	ChaosVehicleMovement->SetBrakeInput(BrakeValue);
 
 	// reset the throttle input
-	ChaosVehicleMovement->SetThrottleInput(0.0f);
+	const URaceParticipantComponent* Participant = FindComponentByClass<URaceParticipantComponent>();
+	if (!Participant || !Participant->IsPreStartRevvingAllowed())
+	{
+		ChaosVehicleMovement->SetThrottleInput(0.0f);
+	}
 }
 
 void AAI_DrivingPawn::DoBrakeStart()

@@ -6,6 +6,7 @@
 #include "RaceParticipantComponent.generated.h"
 
 class ARacingSpline;
+class UPrimitiveComponent;
 
 /**
  * 레이스 참가자 표식입니다. 플레이어 차량과 AI 차량 모두에 붙습니다.
@@ -108,33 +109,29 @@ public:
 	void MarkFinished(int32 InFinishPosition, float InFinishTimeSeconds);
 
 	/**
-	 * 사람의 조작을 잠그거나 풉니다.
+	 * 차량의 이동을 잠그거나 풉니다.
 	 *
 	 * 출발 신호 전에 플레이어가 먼저 튀어나가지 못하게 합니다.
 	 *
-	 * 폰의 입력을 끄는 것만으로는 부족합니다. APawn::DisableInput은 bInputEnabled를 내릴 뿐이고,
-	 * 엔진이 입력 스택을 세울 때 빠지는 것은 그 폰의 입력 컴포넌트 하나입니다
-	 * (APlayerController::BuildInputStack). 플레이어 컨트롤러 자신의 입력 컴포넌트와
-	 * EnableInput으로 밀어 넣은 컴포넌트는 그대로 남습니다. 그래서 스티어링 휠처럼
-	 * 컨트롤러 쪽에 바인딩된 조작은 잠금을 그냥 통과합니다.
-	 *
-	 * 그래서 잠긴 동안에는 매 틱 차량을 직접 붙잡습니다. 누가 어느 경로로 스로틀을 넣든
-	 * 결과가 같아집니다.
+	 * bAllowPreStartRevving이면 페달 입력을 살려 둡니다. Chaos 쪽은 Brake Reverse Guard가
+	 * 중립을 유지해 실제 RPM을 올립니다. 차체는 물리 제약으로 X/Y 이동과 회전을 막고,
+	 * 높이는 노면에 정착하도록 열어 둡니다. 종료 후 잠금은 기본값 false로 입력까지 막습니다.
 	 *
 	 * AI에는 호출하지 않습니다. AI는 대기 상태가 따로 있습니다.
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Racing AI")
-	void SetInputLocked(bool bLocked);
+	void SetInputLocked(bool bLocked, bool bAllowPreStartRevving = false);
 
 	UFUNCTION(BlueprintPure, Category = "Racing AI")
 	bool IsInputLocked() const { return bInputLocked; }
 
+	/** 이동은 잠겼지만 출발 전 RPM 조절은 허용하는 상태인지 */
+	UFUNCTION(BlueprintPure, Category = "Racing AI")
+	bool IsPreStartRevvingAllowed() const { return bInputLocked && bPreStartRevvingAllowed; }
+
 	/**
-	 * 잠긴 차가 이만큼 (cm) 밀리면 제자리로 되돌립니다. 좌우 앞뒤만 재며 높이는 보지 않습니다.
-	 *
-	 * 속도를 0으로 눌러도 물리는 한 스텝 안에서 조금씩 밀어냅니다. 실측 2.4cm/s이므로
-	 * 카운트다운이 길면 쌓여서 출발선을 넘습니다. 작게 둘수록 자주, 대신 눈에 띄지 않게
-	 * 되돌립니다. 크게 두면 한 번에 크게 튀어 그 순간이 보입니다.
+	 * 물리 제약을 만들 수 없는 차의 위치 보정 허용치(cm)입니다.
+	 * 정상 물리 차체는 이 허용치 없이 X/Y 이동과 회전을 제약합니다.
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Racing AI", meta = (ClampMin = "0.5", Units = "cm"))
 	float LockedDriftTolerance = 5.f;
@@ -206,6 +203,9 @@ protected:
 	/** 잠긴 동안 차량을 붙잡아 둡니다 */
 	void HoldVehicleStill();
 
+	/** 기존 자유도를 저장해 차체를 잠그거나, 저장한 자유도를 복구합니다 */
+	void SetPhysicsHold(bool bHold);
+
 	/** 소유 액터나 그 컴포넌트에서 IRacingVehicleInput 구현체를 찾습니다 */
 	UObject* ResolveVehicleInputTarget();
 
@@ -223,6 +223,12 @@ protected:
 
 	/** 사람 조작이 잠겨 있는지 */
 	bool bInputLocked = false;
+	bool bPreStartRevvingAllowed = false;
+	bool bPawnInputDisabledByHold = false;
+
+	TWeakObjectPtr<UPrimitiveComponent> HeldPhysicsRoot;
+	uint8 SavedDOFMode = 0;
+	uint8 SavedAxisLocks = 0;
 
 	/** 잠근 순간의 위치. 밀려나면 여기로 되돌립니다 */
 	FTransform LockedTransform = FTransform::Identity;

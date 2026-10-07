@@ -19,6 +19,9 @@ class UChaosWheeledVehicleMovementComponent;
  * 조작도 함께 사라집니다. 그래서 거의 섰을 때만 켜 둡니다. 달리는 동안 브레이크는 그냥 브레이크이고,
  * 멈춘 뒤에도 계속 누르면 예전처럼 후진합니다.
  *
+ * Race Participant가 차체를 잠근 동안에는 수동 중립을 유지합니다. 출발 전에는 실제
+ * 스로틀로 RPM을 조절하고, 출발 신호로 풀리면 원래 변속 설정과 전진 1단으로 돌아갑니다.
+ *
  * AI 차에는 효과가 없습니다. AI는 대기 중에 브레이크를 누르고 있어서, 멈춘 상태에서 이 기능이 켜지면
  * 그리드에서 뒤로 갑니다. 그래서 폰을 사람이 조종하지 않으면 첫 틱에 스스로 꺼집니다. AI와 플레이어가
  * 같은 차량 블루프린트를 써도 안심하고 붙여 두면 됩니다.
@@ -43,6 +46,7 @@ public:
 
 protected:
 	virtual void BeginPlay() override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
 private:
 	UPROPERTY(Transient)
@@ -50,4 +54,9 @@ private:
 
 	/** 사람이 모는 차인지 확인했는지. 빙의는 BeginPlay보다 늦게 끝나므로 첫 틱에 봅니다 */
 	bool bOwnerChecked = false;
+
+	void ReleaseNeutralHold();
+	bool bNeutralHoldActive = false;
+	bool bSavedAutomaticGears = true;
+	bool bSavedReverseAsBrake = false;
 };

@@ -9,6 +9,7 @@
 #include "Components/PrimitiveComponent.h"
 #include "Engine/World.h"
 #include "RacingAIModule.h"
+#include "PhysicsEngine/BodyInstance.h"
 
 URaceParticipantComponent::URaceParticipantComponent()
 {
@@ -31,6 +32,7 @@ void URaceParticipantComponent::BeginPlay()
 
 void URaceParticipantComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	SetInputLocked(false);
 	const AActor* Owner = GetOwner();
 
 	UE_LOG(LogRacingAI, Log, TEXT("%s: 레이스 참가자 해제 (%s)"),
@@ -86,18 +88,14 @@ void URaceParticipantComponent::MarkDidNotFinish(int32 InFinishPosition)
 	FinishTimeSeconds = 0.f;
 }
 
-void URaceParticipantComponent::SetInputLocked(bool bLocked)
+void URaceParticipantComponent::SetInputLocked(bool bLocked, bool bAllowPreStartRevving)
 {
-	// 잠그든 풀든, 세우던 중이었다면 그 일은 여기서 끝납니다. 잠그면 붙잡기로 넘어가고
-	// 풀면 다음 레이스가 시작된 것입니다.
 	bStopping = false;
-
-	if (bInputLocked == bLocked)
-	{
-		return;
-	}
-
+	const bool bWasHardLocked = bInputLocked && !bPreStartRevvingAllowed;
+	// 반복 호출도 그리드 재배치 후의 새 위치에 제약을 걸어야 합니다.
+	SetPhysicsHold(false);
 	bInputLocked = bLocked;
+	bPreStartRevvingAllowed = bLocked && bAllowPreStartRevving;
 
 	AActor* Owner = GetOwner();
 	if (!Owner)
@@ -105,39 +103,85 @@ void URaceParticipantComponent::SetInputLocked(bool bLocked)
 		return;
 	}
 
-	// 사람의 입력을 막습니다. 이것만으로는 폰에 바인딩된 조작만 끊깁니다.
+	// 출발 전에는 페달을 받습니다. 종료 후에만 폰 입력도 막습니다.
 	if (APawn* Pawn = Cast<APawn>(Owner))
 	{
 		if (APlayerController* PC = Cast<APlayerController>(Pawn->GetController()))
 		{
-			if (bLocked)
+			if (bLocked && !bPreStartRevvingAllowed && Pawn->InputEnabled())
 			{
 				Pawn->DisableInput(PC);
+				bPawnInputDisabledByHold = true;
 			}
-			else
+			else if ((!bLocked || bPreStartRevvingAllowed) && bPawnInputDisabledByHold)
 			{
 				Pawn->EnableInput(PC);
+				bPawnInputDisabledByHold = false;
 			}
 		}
 	}
 
 	SetControllerTickPrerequisite(bLocked);
-
-	if (bLocked)
+	if (bWasHardLocked && (!bLocked || bPreStartRevvingAllowed))
 	{
-		LockedTransform = Owner->GetActorTransform();
-		SetComponentTickEnabled(true);
-		HoldVehicleStill();
-	}
-	else
-	{
-		SetComponentTickEnabled(false);
-
 		if (UObject* Target = ResolveVehicleInputTarget())
 		{
 			IRacingVehicleInput::Execute_ApplyBrake(Target, 0.f);
 		}
 	}
+
+	if (bLocked)
+	{
+		LockedTransform = Owner->GetActorTransform();
+		SetComponentTickEnabled(true);
+		SetPhysicsHold(true);
+		HoldVehicleStill();
+	}
+	else
+	{
+		SetComponentTickEnabled(false);
+	}
+}
+
+void URaceParticipantComponent::SetPhysicsHold(bool bHold)
+{
+	if (!bHold)
+	{
+		if (UPrimitiveComponent* Root = HeldPhysicsRoot.Get())
+		{
+			if (FBodyInstance* Body = Root->GetBodyInstance())
+			{
+				Body->bLockXTranslation = (SavedAxisLocks & 1) != 0;
+				Body->bLockYTranslation = (SavedAxisLocks & 2) != 0;
+				Body->bLockZTranslation = (SavedAxisLocks & 4) != 0;
+				Body->bLockXRotation = (SavedAxisLocks & 8) != 0;
+				Body->bLockYRotation = (SavedAxisLocks & 16) != 0;
+				Body->bLockZRotation = (SavedAxisLocks & 32) != 0;
+				Body->SetDOFLock(static_cast<EDOFMode::Type>(SavedDOFMode));
+			}
+		}
+		HeldPhysicsRoot.Reset();
+		return;
+	}
+
+	if (HeldPhysicsRoot.IsValid()) return;
+	AActor* Owner = GetOwner();
+	UPrimitiveComponent* Root = Owner ? Cast<UPrimitiveComponent>(Owner->GetRootComponent()) : nullptr;
+	FBodyInstance* Body = Root && Root->IsSimulatingPhysics() ? Root->GetBodyInstance() : nullptr;
+	if (!Body || !Body->IsValidBodyInstance()) return;
+
+	HeldPhysicsRoot = Root;
+	SavedDOFMode = static_cast<uint8>(Body->DOFMode.GetValue());
+	SavedAxisLocks = (Body->bLockXTranslation ? 1 : 0) | (Body->bLockYTranslation ? 2 : 0)
+		| (Body->bLockZTranslation ? 4 : 0) | (Body->bLockXRotation ? 8 : 0)
+		| (Body->bLockYRotation ? 16 : 0) | (Body->bLockZRotation ? 32 : 0);
+	Body->bLockXTranslation = true;
+	Body->bLockYTranslation = true;
+	Body->bLockXRotation = true;
+	Body->bLockYRotation = true;
+	Body->bLockZRotation = true;
+	// Z의 기존 설정은 유지합니다. 기본 차량은 높이가 자유로워 노면에 정착합니다.
+	Body->SetDOFLock(EDOFMode::SixDOF);
 }
 
 UObject* URaceParticipantComponent::ResolveVehicleInputTarget()
@@ -184,8 +228,8 @@ void URaceParticipantComponent::HoldVehicleStill()
 		return;
 	}
 
-	// 인터페이스가 있으면 정식 경로로 눌러 둡니다. 엔진이 헛돌지 않아 소리도 맞습니다.
-	if (UObject* Target = ResolveVehicleInputTarget())
+	// 종료 후 잠금은 입력을 지우지만, 출발 대기는 실제 엔진을 중립에서 돌립니다.
+	if (UObject* Target = !bPreStartRevvingAllowed ? ResolveVehicleInputTarget() : nullptr)
 	{
 		IRacingVehicleInput::Execute_ApplySteering(Target, 0.f);
 		IRacingVehicleInput::Execute_ApplyThrottle(Target, 0.f);
@@ -201,20 +245,18 @@ void URaceParticipantComponent::HoldVehicleStill()
 		return;
 	}
 
-	// 아래로 떨어지는 것은 그대로 둡니다. 속도를 통째로 0으로 만들면 중력까지 지워져,
-	// 차가 스폰된 높이에 그대로 떠 있게 됩니다. 실제로 그렇게 만들어 놓고 재 보니 잠긴 차가
-	// 72cm 공중에 있었습니다. 위로 튀어 오르는 것만 막고, 앞뒤 좌우로 나가는 것을 막습니다.
+	SetPhysicsHold(true);
+	// 중력과 서스펜션은 높이를 정착시킵니다. 수평/회전은 물리 스텝 안에서도 제약됩니다.
 	const FVector Velocity = Root->GetPhysicsLinearVelocity();
 
-	Root->SetPhysicsLinearVelocity(FVector(0.f, 0.f, FMath::Min(Velocity.Z, 0.f)));
+	Root->SetPhysicsLinearVelocity(FVector(0.f, 0.f, Velocity.Z));
 	Root->SetPhysicsAngularVelocityInDegrees(FVector::ZeroVector);
 
-	// 속도를 눌러도 한 스텝 안에서는 조금씩 밀립니다. 쌓여서 출발선을 넘기 전에 되돌립니다.
-	// 높이는 재지도 되돌리지도 않습니다. 가라앉는 중인 차를 다시 들어 올리게 됩니다.
+	// 유효한 물리 바디가 없는 구현체만 기존 위치 보정을 사용합니다.
 	const FVector Current = Owner->GetActorLocation();
 	const FVector Locked = LockedTransform.GetLocation();
 
-	if (FVector::DistSquared2D(Current, Locked) > FMath::Square(LockedDriftTolerance))
+	if (!HeldPhysicsRoot.IsValid() && FVector::DistSquared2D(Current, Locked) > FMath::Square(LockedDriftTolerance))
 	{
 		FTransform Restore = LockedTransform;
 		Restore.SetLocation(FVector(Locked.X, Locked.Y, Current.Z));
@@ -413,6 +455,7 @@ bool URaceParticipantComponent::PlaceOnTrack(const ARacingSpline& Track, float S
 		Location.Z = Hit.ImpactPoint.Z + OriginAboveBottom + RespawnClearance;
 	}
 
+	SetPhysicsHold(false);
 	Owner->SetActorTransform(FTransform(Facing, Location), false, nullptr, ETeleportType::TeleportPhysics);
 
 	if (UPrimitiveComponent* Root = Cast<UPrimitiveComponent>(Owner->GetRootComponent()))
@@ -423,6 +466,7 @@ bool URaceParticipantComponent::PlaceOnTrack(const ARacingSpline& Track, float S
 
 	// 잠겨 있던 차라면 붙잡을 자리도 옮긴 자리입니다. 안 그러면 다음 틱에 원래 자리로 끌려갑니다.
 	LockedTransform = Owner->GetActorTransform();
+	if (bInputLocked) SetPhysicsHold(true);
 
 	return true;
 }

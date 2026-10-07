@@ -88,7 +88,8 @@ void URaceDirectorSubsystem::RegisterParticipant(URaceParticipantComponent* Part
 	{
 		// 플레이어 폰은 게임모드가 늦게 만들기도 합니다. 등록 시점에 아직 출발 전이면
 		// 그때 잠가야 카운트다운 도중에 등록된 차가 그냥 달려 나가지 않습니다.
-		Participant->SetInputLocked(RaceState != ERaceState::Racing);
+		Participant->SetInputLocked(RaceState != ERaceState::Racing,
+			RaceState == ERaceState::Idle || RaceState == ERaceState::Countdown);
 	}
 
 	UE_LOG(LogRacingAI, Verbose, TEXT("참가자 등록: %s (AI=%s)"),
@@ -288,7 +289,8 @@ void URaceDirectorSubsystem::HoldAtGrid()
 		{
 			if (Participant && !Participant->IsA<URacingAIComponent>())
 			{
-				Participant->SetInputLocked(true);
+				Participant->SetInputLocked(true,
+					RaceState == ERaceState::Idle || RaceState == ERaceState::Countdown);
 			}
 		}
 	}
@@ -302,9 +304,8 @@ void URaceDirectorSubsystem::StartCountdown(float Seconds)
 		return;
 	}
 
-	HoldAtGrid();
-
 	RaceState = ERaceState::Countdown;
+	HoldAtGrid();
 	CountdownRemaining = FMath::Max(0, FMath::CeilToInt(Seconds));
 
 	// 기록을 여기서부터 잽니다. 손님에게는 카운트다운이 이미 체험의 일부이고, 운영자에게는
@@ -569,6 +570,8 @@ void URaceDirectorSubsystem::ResetRace()
 
 		if (AActor* Owner = Participant->GetOwner())
 		{
+			// 먼저 제약을 풀어야 이전 월드 위치의 앵커가 재배치를 끌어당기지 않습니다.
+			Participant->SetInputLocked(false);
 			TeleportAndSettle(*Owner, Placement.Transform);
 		}
 
