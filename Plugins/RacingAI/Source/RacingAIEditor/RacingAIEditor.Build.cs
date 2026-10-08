@@ -27,7 +27,8 @@ public class RacingAIEditor : ModuleRules
 			"SlateCore",
 			"InputCore",
 			"UnrealEd",
-			"ToolMenus"
+			"ToolMenus",
+			"Settings"
 		});
 	}
 }

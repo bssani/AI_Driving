@@ -37,7 +37,18 @@ GridSpawner의 AI 슬롯 `Profile`이 그 조합으로 바뀝니다. 바뀐 뒤 
 - `bRandomizeProfiles`는 꺼집니다. 켜 두면 고른 조합을 무작위 풀이 덮어쓰기 때문입니다
 - Ctrl+Z로 되돌릴 수 있습니다. 플레이 중에는 버튼이 꺼집니다
 
-조합은 **Project Settings > Game > Race Setup Presets**에서 바꿉니다
+패널의 **Edit presets**를 누르면 **Project Settings > Game > Race Setup Presets**가 열립니다.
+각 Easy / Medium / Difficult의 **Profiles** 목록에는 기본 프로필뿐 아니라 직접 만든
+`RacingAIProfile` 에셋도 지정할 수 있습니다. 예를 들어 Rookie를 복제해
+`DA_Driver_Child`의 값을 조절하고 Easy의 Profiles에 넣으면 Easy 버튼이 그 에셋을 적용합니다.
+목록에 서로 다른 에셋을 넣으면 그 순서대로 섞어서 적용합니다.
+
+버튼을 누르면 **Current difficulty : EASY / MEDIUM / DIFFICULT**가 별도 줄에 표시됩니다.
+실패한 적용은 현재 난이도를 바꾸지 않습니다. Ctrl+Z 후에는 실제 슬롯 조합으로 표시가 갱신되며,
+설정된 조합과 다른 수동 편집은 **CUSTOM**으로 표시됩니다. 패널에서 아직 적용하지 않았거나
+다른 맵으로 이동하면 **NOT SET**입니다. 이 줄은 플레이 중에도 표시됩니다.
+
+조합은 위 설정 화면에서 바꿉니다
 (`DefaultEditor.ini`에 저장). 기본값:
 
 | 버튼 | AI 순서 |

@@ -2,9 +2,10 @@
 
 #include "Widgets/SCompoundWidget.h"
 
+class ARaceGridSpawner;
 class UWorld;
 
-/** 플레이 전에 GridSpawner의 AI 구성을 프리셋 버튼 하나로 바꾸는 패널입니다. */
+/** 플레이 전에 GridSpawner의 AI 구성을 버튼 하나로 바꾸는 패널입니다. */
 class SRaceSetupPanel : public SCompoundWidget
 {
 public:
@@ -16,8 +17,12 @@ public:
 private:
 	UWorld* GetEditorWorld() const;
 	bool CanChangeSettings() const;
+	FText GetCurrentDifficultyText() const;
 	FReply ApplyPreset(int32 PresetIndex);
 
-	/** 마지막 버튼의 결과(성공 또는 실패 이유)입니다. */
+	TWeakObjectPtr<ARaceGridSpawner> AppliedGrid;
+	int32 AppliedPresetIndex = INDEX_NONE;
+
+	/** 현재 난이도와 별도로 마지막 작업의 성공/오류를 표시합니다. */
 	FText Status;
 };
